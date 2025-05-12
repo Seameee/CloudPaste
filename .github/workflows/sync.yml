@@ -2,6 +2,7 @@ name: Upstream Sync
 
 permissions:
   contents: write
+  workflows: write
 
 on:
   schedule:
@@ -38,3 +39,24 @@ jobs:
           echo "[Error] 由于上游仓库的 workflow 文件变更，导致 GitHub 自动暂停了本次自动更新，你需要手动 Sync Fork 一次，详细教程请查看项目README.md "
           echo "[Error] Due to a change in the workflow file of the upstream repository, GitHub has automatically suspended the scheduled automatic update. You need to manually sync your fork. Please refer to the project README.md for instructions. "
           exit 1
+      - name: Trigger Deploy Backend Workflow
+        # Condition to trigger: sync step must have succeeded AND changes were actually synced (STATUS == 'SYNCED')
+        if: success() && steps.sync.outputs.STATUS == 'SYNCED'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            console.log('Sync successful and changes were synced. Triggering Deploy Backend workflow...');
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'docker-build-backend.yml', // <-- 替换成你的部署工作流文件名
+                ref: 'main' // 触发 main 分支上的 workflow_dispatch
+              });
+              console.log('Successfully triggered Deploy Backend workflow.');
+            } catch (error) {
+              console.error('Failed to trigger Deploy Backend workflow:', error);
+              // 根据需要决定是否失败整个工作流
+              // throw error; 
+            }
