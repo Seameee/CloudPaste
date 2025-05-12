@@ -1,8 +1,8 @@
 name: Upstream Sync
 
+# 保持顶层 permissions: contents: write，用于同步 action 推送代码
 permissions:
   contents: write
-  workflows: write
 
 on:
   schedule:
@@ -14,6 +14,12 @@ jobs:
     name: Sync latest commits from upstream repo
     runs-on: ubuntu-latest
     if: ${{ github.event.repository.fork }}
+
+    # 在 Job 级别添加 permissions，特别是 actions: write，用于触发另一个工作流
+    # contents: write 在 Job 级别显式声明或继承自 workflow 级别都可以
+    permissions:
+      contents: write # 显式声明或继承
+      actions: write # <-- 这里是关键，用于触发 workflow_dispatch
 
     steps:
       # Step 1: run a standard checkout action
@@ -28,7 +34,7 @@ jobs:
           upstream_sync_repo: ling-drag0n/CloudPaste
           upstream_sync_branch: main
           target_sync_branch: main
-          target_repo_token: ${{ secrets.GITHUB_TOKEN }} # automatically generated, no need to set
+          target_repo_token: ${{ secrets.GITHUB_TOKEN }}
 
           # Set test_mode true to run tests instead of the true action!!
           test_mode: false
@@ -39,6 +45,8 @@ jobs:
           echo "[Error] 由于上游仓库的 workflow 文件变更，导致 GitHub 自动暂停了本次自动更新，你需要手动 Sync Fork 一次，详细教程请查看项目README.md "
           echo "[Error] Due to a change in the workflow file of the upstream repository, GitHub has automatically suspended the scheduled automatic update. You need to manually sync your fork. Please refer to the project README.md for instructions. "
           exit 1
+
+      # Step 3: Trigger the Deploy Backend Workflow if sync was successful and changes were synced
       - name: Trigger Deploy Backend Workflow
         # Condition to trigger: sync step must have succeeded AND changes were actually synced (STATUS == 'SYNCED')
         if: success() && steps.sync.outputs.STATUS == 'SYNCED'
@@ -51,12 +59,13 @@ jobs:
               await github.rest.actions.createWorkflowDispatch({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                workflow_id: 'docker-build-backend.yml', // <-- 替换成你的部署工作流文件名
-                ref: 'main' // 触发 main 分支上的 workflow_dispatch
+                workflow_id: 'docker-build-backend.yml', # <-- 再次确认这个文件名是否正确
+                ref: 'main' # 触发 main 分支上的 workflow_dispatch
               });
               console.log('Successfully triggered Deploy Backend workflow.');
             } catch (error) {
               console.error('Failed to trigger Deploy Backend workflow:', error);
               // 根据需要决定是否失败整个工作流
-              // throw error; 
+              // throw error;
             }
+
