@@ -45,6 +45,11 @@ const isDev = import.meta.env.DEV;
 
 // 计算是否显示页脚
 const shouldShowFooter = computed(() => {
+  // 管理面板页面不显示页脚
+  if (activePage.value === "admin") {
+    return false;
+  }
+
   const footerMarkdown = siteConfigStore.siteFooterMarkdown;
   return footerMarkdown && footerMarkdown.trim();
 });
@@ -89,8 +94,12 @@ const updateTheme = () => {
   // 更新 DOM 类
   if (isDarkMode.value) {
     document.documentElement.classList.add("dark");
+    document.body.classList.add("bg-custom-bg-900", "text-custom-text-dark");
+    document.body.classList.remove("bg-custom-bg-50", "text-custom-text");
   } else {
     document.documentElement.classList.remove("dark");
+    document.body.classList.add("bg-custom-bg-50", "text-custom-text");
+    document.body.classList.remove("bg-custom-bg-900", "text-custom-text-dark");
   }
 
   // 保存主题模式到本地存储
@@ -108,12 +117,7 @@ onMounted(() => {
   darkModeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
   // 为媒体查询添加监听器
-  if (darkModeMediaQuery.addEventListener) {
-    darkModeMediaQuery.addEventListener("change", darkModeHandler);
-  } else {
-    // 兼容旧版浏览器
-    darkModeMediaQuery.addListener(darkModeHandler);
-  }
+  darkModeMediaQuery.addEventListener("change", darkModeHandler);
 
   // 初始化主题
   updateTheme();
@@ -149,8 +153,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div :class="['app-container min-h-screen transition-colors duration-200', isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900']">
-    <header :class="['sticky top-0 z-50 shadow-sm transition-colors', isDarkMode ? 'bg-gray-800' : 'bg-white']">
+  <div :class="['app-container min-h-screen transition-colors duration-200', isDarkMode ? 'bg-custom-bg-900 text-custom-text-dark' : 'bg-custom-bg-50 text-custom-text']">
+    <header :class="['sticky top-0 z-50 shadow-sm transition-colors', isDarkMode ? 'bg-custom-surface-dark' : 'bg-custom-surface']">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
           <div class="flex">
@@ -414,7 +418,7 @@ onBeforeUnmount(() => {
       <router-view :dark-mode="isDarkMode" class="transition-opacity duration-300 flex-1 flex flex-col" :class="{ 'opacity-0': transitioning }" />
     </main>
 
-    <footer v-if="shouldShowFooter" :class="['border-t transition-colors mt-auto', isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200']">
+    <footer v-if="shouldShowFooter" :class="['border-t transition-colors mt-auto', isDarkMode ? 'bg-custom-surface-dark border-gray-700' : 'bg-custom-surface border-gray-200']">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center py-6">
         <FooterMarkdownRenderer :content="siteConfigStore.siteFooterMarkdown" :dark-mode="isDarkMode" />
       </div>
@@ -453,19 +457,6 @@ main {
   a {
     -webkit-tap-highlight-color: transparent;
   }
-}
-
-/* 主题色适配 - 需要添加到 tailwind.config.js 中的 primary 色 */
-:root {
-  --color-primary-500: #3b82f6; /* 蓝色作为默认主题色 */
-}
-
-.dark {
-  --color-primary-500: #60a5fa; /* 深色模式下使用较亮的蓝色 */
-}
-
-.border-primary-500 {
-  border-color: var(--color-primary-500);
 }
 
 /* 禁用移动端点击时的蓝色高亮 */
