@@ -4,6 +4,7 @@ import { storeToRefs } from "pinia";
 import { useAuthStore } from "@/stores/authStore.js";
 import { useFileSystemStore } from "@/stores/fileSystemStore.js";
 import { useFilePreview } from "@/composables";
+import { useViewStateMachine } from "./composables/useViewStateMachine";
 
 /**
  * MountExplorer 视图控制器
@@ -24,6 +25,9 @@ export function useMountExplorerController() {
   const authStore = useAuthStore();
   const fileSystemStore = useFileSystemStore();
 
+  // 初始化视图状态机
+  const stateMachine = useViewStateMachine();
+
   const {
     currentPath,
     loading,
@@ -38,16 +42,12 @@ export function useMountExplorerController() {
   const {
     previewFile,
     previewInfo,
-    isPreviewMode,
     isLoading: isPreviewLoading,
     error: previewError,
     updatePreviewUrl,
     stopPreview,
     initPreviewFromRoute,
   } = filePreview;
-
-  // 基于当前路由判断是否存在预览意图
-  const hasPreviewIntent = computed(() => !!route.query.preview);
 
   // 权限相关派生状态
   const isAdmin = computed(() => authStore.isAdmin);
@@ -133,19 +133,15 @@ export function useMountExplorerController() {
     updateUrl(normalizedPath);
   };
 
-  // ==== 防止竞态的异步处理器 ====
+  // ==== 异步处理器 ====
+  // 注意：竞态条件现在由 fsService 内部的 AbortController 机制处理
+  // 这里的处理器主要用于确保操作顺序执行，避免并发问题
   const createAsyncProcessor = () => {
     let currentPromise = null;
 
     return async (asyncFn) => {
-      if (currentPromise) {
-        try {
-          await currentPromise;
-        } catch {
-          // 忽略之前操作的错误
-        }
-      }
-
+      // 不再等待之前的请求完成，因为 fsService 会自动取消旧请求
+      // 直接执行新操作
       currentPromise = asyncFn();
 
       try {
@@ -232,11 +228,35 @@ export function useMountExplorerController() {
     const intent = getRouteIntent();
 
     if (intent.type === "directory_browse") {
-      await fileSystemStore.loadDirectory(finalPath);
-    } else if (intent.type === "file_preview") {
-      if (!fileSystemStore.directoryData || currentPath.value !== intent.directoryPath) {
-        await fileSystemStore.loadDirectory(intent.directoryPath);
+      // 使用状态机加载目录
+      stateMachine.startLoadingDirectory(finalPath);
+      try {
+        await fileSystemStore.loadDirectory(finalPath);
+        stateMachine.onDirectoryLoaded(fileSystemStore.directoryData);
+      } catch (error) {
+        if (error.code === "FS_PATH_PASSWORD_REQUIRED") {
+          stateMachine.requirePassword();
+        } else {
+          stateMachine.setError(error);
+        }
       }
+    } else if (intent.type === "file_preview") {
+      // 先加载目录
+      if (!fileSystemStore.directoryData || currentPath.value !== intent.directoryPath) {
+        stateMachine.startLoadingDirectory(intent.directoryPath);
+        try {
+          await fileSystemStore.loadDirectory(intent.directoryPath);
+          stateMachine.onDirectoryLoaded(fileSystemStore.directoryData);
+        } catch (error) {
+          if (error.code === "FS_PATH_PASSWORD_REQUIRED") {
+            stateMachine.requirePassword();
+          } else {
+            stateMachine.setError(error);
+          }
+          return;
+        }
+      }
+      // 然后加载文件预览（在handlePreviewChange中处理）
     }
   };
 
@@ -250,9 +270,21 @@ export function useMountExplorerController() {
 
   const handlePreviewChange = async () => {
     try {
+      const previewFileName = route.query.preview;
+      if (previewFileName) {
+        // 使用状态机加载文件预览
+        stateMachine.startLoadingFile(previewFileName, currentPath.value);
+      }
+
       await initPreviewFromRoute(currentPath.value, directoryItems.value);
+
+      // 文件预览加载完成后更新状态机
+      if (previewFileName && previewFile.value) {
+        stateMachine.onFileLoaded(previewFile.value);
+      }
     } catch (e) {
       console.error("预览变化处理失败:", e);
+      stateMachine.setError(e);
     }
   };
 
@@ -345,10 +377,17 @@ export function useMountExplorerController() {
     // 预览状态
     previewFile,
     previewInfo,
-    isPreviewMode,
     isPreviewLoading,
     previewError,
-    hasPreviewIntent,
+
+    // 状态机状态
+    viewState: stateMachine.viewState,
+    showDirectory: stateMachine.showDirectory,
+    showFilePreview: stateMachine.showFilePreview,
+    isLoading: stateMachine.isLoading,
+    hasError: stateMachine.hasError,
+    needsPassword: stateMachine.needsPassword,
+    previewFileName: stateMachine.previewFileName,
 
     // 导航/预览操作
     updateUrl,

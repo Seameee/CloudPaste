@@ -11,6 +11,13 @@ DROP TABLE IF EXISTS admins;
 DROP TABLE IF EXISTS pastes;
 DROP TABLE IF EXISTS file_passwords;
 DROP TABLE IF EXISTS paste_passwords;
+DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS fs_meta;
+DROP TABLE IF EXISTS storage_mounts;
+DROP TABLE IF EXISTS system_settings;
+DROP TABLE IF EXISTS scheduled_jobs;
+DROP TABLE IF EXISTS upload_sessions;
+DROP TABLE IF EXISTS scheduled_job_runs;
 
 -- 创建pastes表 - 存储文本分享数据
 CREATE TABLE pastes (
@@ -77,7 +84,8 @@ CREATE TABLE storage_configs (
   admin_id TEXT,                       -- 归属管理员（允许NULL以兼容/预留）
   is_public INTEGER NOT NULL DEFAULT 0,
   is_default INTEGER NOT NULL DEFAULT 0,
-  remark TEXT,
+  remark TEXT,                         -- 备注说明
+  url_proxy TEXT,                      -- 代理入口 URL（例如 Worker/CDN 反代入口）
   status TEXT NOT NULL DEFAULT 'ENABLED',
   config_json TEXT NOT NULL,           -- 驱动私有配置（JSON，敏感字段加密后存入）
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -223,6 +231,149 @@ CREATE INDEX idx_storage_mounts_created_by ON storage_mounts(created_by);
 CREATE INDEX idx_storage_mounts_is_active ON storage_mounts(is_active);
 CREATE INDEX idx_storage_mounts_sort_order ON storage_mounts(sort_order);
 
+
+-- 通用上传会话表：管理各存储驱动的前端分片/断点续传会话
+CREATE TABLE upload_sessions (
+  id TEXT PRIMARY KEY,                   -- 内部会话ID（例如 upl_xxx），供前后端统一引用
+
+  -- 主体与目标信息
+  user_id TEXT NOT NULL,                 -- 用户或 API Key 标识
+  user_type TEXT NOT NULL,               -- 'admin' | 'apikey' | 其他
+  storage_type TEXT NOT NULL,            -- 存储类型：S3 / ONEDRIVE / WEBDAV / LOCAL 等
+  storage_config_id TEXT NOT NULL,       -- 关联的存储配置 ID（storage_configs.id）
+  mount_id TEXT,                         -- 关联挂载 ID（storage_mounts.id，可为空）
+  fs_path TEXT NOT NULL,                 -- FS 视图路径，如 /onedrive/path/file.ext 或 /s3/bucket/key
+  source TEXT NOT NULL,                  -- 会话来源：FS / SHARE / OTHER
+
+  -- 文件级元数据
+  file_name TEXT NOT NULL,               -- 文件名
+  file_size INTEGER NOT NULL,            -- 总大小（字节）
+  mime_type TEXT,                        -- MIME 类型（可选）
+  checksum TEXT,                         -- 校验和（可选，例如 SHA-256）
+
+  -- 文件指纹（用于跨驱动/跨会话识别同一逻辑文件）
+  fingerprint_algo TEXT,                 -- 指纹算法标识，例如 meta-v1 / sha256 等
+  fingerprint_value TEXT,                -- 指纹值（算法自定义，可为元数据拼接或哈希）
+
+  -- 策略与进度
+  strategy TEXT NOT NULL,                -- 分片策略：per_part_url / single_session / ...
+  part_size INTEGER NOT NULL,            -- 分片大小（字节）
+  total_parts INTEGER NOT NULL,          -- 预估分片总数
+  bytes_uploaded INTEGER NOT NULL DEFAULT 0,  -- 已上传字节数（对于 single_session 可由 nextExpectedRanges 推导）
+  uploaded_parts INTEGER NOT NULL DEFAULT 0,  -- 已确认的分片数量（对于 per_part_url 有意义）
+  next_expected_range TEXT,              -- 对于 single_session：Graph nextExpectedRanges[0]，如 \"5242880-35799947\"
+
+  -- provider 会话信息（驱动私有）
+  provider_upload_id TEXT,               -- 例如 S3 UploadId / 其他云 provider upload id
+  provider_upload_url TEXT,              -- 例如 OneDrive uploadSession.uploadUrl
+  provider_meta TEXT,                    -- JSON 扩展字段（驱动私有）
+
+  -- 会话状态与错误
+  status TEXT NOT NULL,                  -- active / completed / aborted / expired / error
+  error_code TEXT,
+  error_message TEXT,
+
+  -- 生命周期
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME                    -- 会话过期时间（例如 Graph expirationDateTime）
+);
+
+CREATE INDEX idx_upload_sessions_user ON upload_sessions(user_id, user_type);
+CREATE INDEX idx_upload_sessions_storage ON upload_sessions(storage_type, storage_config_id);
+CREATE INDEX idx_upload_sessions_mount_path ON upload_sessions(mount_id, fs_path);
+CREATE INDEX idx_upload_sessions_status ON upload_sessions(status, updated_at DESC);
+CREATE INDEX idx_upload_sessions_source ON upload_sessions(source);
+CREATE INDEX idx_upload_sessions_fingerprint ON upload_sessions(fingerprint_value);
+
+
+CREATE TABLE tasks (
+  -- 核心标识
+  task_id TEXT PRIMARY KEY,
+  task_type TEXT NOT NULL,           -- 'copy' | 'upload' | 'download' | 'delete' | 'archive'
+
+  -- 通用状态
+  status TEXT NOT NULL,              -- 'pending' | 'running' | 'completed' | 'partial' | 'failed' | 'cancelled'
+
+  -- 任务负载（JSON格式）
+  payload TEXT NOT NULL,             -- JSON: { items: [...], options: {...} }
+
+  -- 统计信息（JSON格式）
+  stats TEXT NOT NULL DEFAULT '{}',  -- JSON: { totalItems, processedItems, successCount, failedCount, skippedCount }
+
+  -- 错误信息（可选）
+  error_message TEXT,
+
+  -- 用户信息
+  user_id TEXT NOT NULL,
+  user_type TEXT NOT NULL,           -- 'admin' | 'apikey'
+
+  -- Workflows 关联（仅 Workers 运行时使用，可选）
+  workflow_instance_id TEXT,
+
+  -- 时间戳（Unix timestamp in milliseconds）
+  created_at INTEGER NOT NULL,
+  started_at INTEGER,
+  updated_at INTEGER NOT NULL,
+  finished_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_status_created ON tasks (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tasks_type_status ON tasks (task_type, status);
+CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tasks_workflow ON tasks (workflow_instance_id) WHERE workflow_instance_id IS NOT NULL;
+
+CREATE TABLE scheduled_jobs (
+  task_id              TEXT PRIMARY KEY,              -- 作业唯一标识（job ID），例如 'cleanup_upload_sessions_default'
+  handler_id           TEXT,                          -- 任务类型ID（Handler ID），例如 'cleanup_upload_sessions'
+  name                 TEXT,                          -- 作业名称（展示用，可自定义）
+  description          TEXT,                          -- 作业描述/备注
+  enabled              INTEGER NOT NULL,              -- 1=启用, 0=禁用
+
+  schedule_type        TEXT NOT NULL DEFAULT 'interval', -- 调度类型：interval | cron
+  interval_sec         INTEGER,                       -- interval 模式下的执行间隔(秒)
+  cron_expression      TEXT,                          -- cron 模式下的表达式，例如 \"0 2 * * *\"
+
+  run_count            INTEGER NOT NULL DEFAULT 0,    -- 累计执行次数（成功/失败均计入）
+  failure_count        INTEGER NOT NULL DEFAULT 0,    -- 累计失败次数
+
+  last_run_status      TEXT,                          -- 最近一次执行状态：success/failure/skipped
+  last_run_started_at  DATETIME,                      -- 最近一次执行开始时间
+  last_run_finished_at DATETIME,                      -- 最近一次执行结束时间
+
+  next_run_after       DATETIME,                      -- 最早允许再次执行的时间
+  lock_until           DATETIME,                      -- 锁过期时间，用于多实例互斥
+
+  config_json          TEXT NOT NULL DEFAULT '{}',
+  created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_scheduled_jobs_next_run ON scheduled_jobs (enabled, next_run_after);
+
+-- 后台调度作业运行日志表：记录每次执行结果
+CREATE TABLE scheduled_job_runs (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id       TEXT NOT NULL,                  -- 对应 scheduled_jobs.task_id
+  status        TEXT NOT NULL,                  -- 'success' | 'failure' | 'skipped'
+  trigger_type  TEXT NOT NULL DEFAULT 'auto',   -- 触发类型：'auto' | 'manual'
+
+  scheduled_at  DATETIME,                       -- 计划执行时间（可选）
+  started_at    DATETIME NOT NULL,              -- 本次执行开始时间
+  finished_at   DATETIME,                       -- 本次执行结束时间
+  duration_ms   INTEGER,                        -- 执行耗时(毫秒)
+
+  summary       TEXT,                           -- 简要摘要，如影响行数等
+  error_message TEXT,                           -- 失败时的错误信息
+  details_json  TEXT,                           -- 可选的结构化详情(JSON)
+
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_scheduled_job_runs_task_started
+  ON scheduled_job_runs (task_id, started_at DESC);
+
+
 -- 创建初始管理员账户
 -- 默认账户: admin/admin123
 -- 注意: 这是SHA-256哈希后的密码，实际部署时应更改
@@ -246,13 +397,13 @@ VALUES (
 
 -- 插入示例S3配置（加密密钥仅作示例，实际应用中应当由系统加密存储）
 INSERT INTO storage_configs (
-  id, name, storage_type, admin_id, is_public, is_default, remark, status, config_json, created_at, updated_at, last_used
+  id, name, storage_type, admin_id, is_public, is_default, remark, url_proxy, status, config_json, created_at, updated_at, last_used
 ) VALUES (
   '22222222-2222-2222-2222-222222222222',
   'Cloudflare R2存储',
   'S3',
   '00000000-0000-0000-0000-000000000000',
-  0, 0, NULL, 'ENABLED',
+  0, 0, NULL, NULL, 'ENABLED',
   '{"provider_type":"Cloudflare R2","endpoint_url":"https://account-id.r2.cloudflarestorage.com","bucket_name":"my-cloudpaste-bucket","region":"auto","path_style":0,"default_folder":"uploads/","custom_host":null,"signature_expires_in":3600,"total_storage_bytes":null,"access_key_id":"encrypted:access-key-id-placeholder","secret_access_key":"encrypted:secret-access-key-placeholder"}',
   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
 );

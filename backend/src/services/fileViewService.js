@@ -8,6 +8,9 @@ import { verifyPassword } from "../utils/crypto.js";
 import { getEffectiveMimeType, getContentTypeAndDisposition } from "../utils/fileUtils.js";
 import { getFileBySlug, isFileAccessible } from "./fileService.js";
 import { ObjectStore } from "../storage/object/ObjectStore.js";
+import { StorageStreaming, STREAMING_CHANNELS } from "../storage/streaming/index.js";
+import { StorageFactory } from "../storage/factory/StorageFactory.js";
+import { FILE_TYPES } from "../constants/index.js";
 
 /**
  * 文件查看服务类
@@ -61,7 +64,7 @@ export class FileViewService {
    * @param {boolean} forceDownload - 是否强制下载
    * @returns {Promise<Response>} 响应对象
    */
-  async handleFileDownload(slug, request, forceDownload = false) {
+  async handleFileDownload(slug, request, forceDownload = false, options = {}) {
     try {
       // 查询文件详情
       const file = await getFileBySlug(this.db, slug, this.encryptionSecret);
@@ -125,22 +128,38 @@ export class FileViewService {
 
       const fileRecord = result.file;
       const useProxyFlag = fileRecord.use_proxy ?? 0;
+      const forceProxy = options && options.forceProxy === true;
+
+      // 文本类预览优先走本地代理，以避免直链 CORS 与内容类型差异
+      const isInline = !forceDownload;
+      const isTextLike =
+        fileRecord.type === FILE_TYPES.TEXT ||
+        (fileRecord.mimetype && fileRecord.mimetype.startsWith("text/"));
 
       // 抽取本地代理下载逻辑，便于在直链失败时复用
+      // 使用 StorageStreaming 层统一处理
       const proxyDownload = async () => {
-        // 获取文件的MIME类型（用于覆盖/统一 Content-Type）
-        const contentType = getEffectiveMimeType(fileRecord.mimetype, fileRecord.filename);
-
-        // 处理 Range 请求（透传给底层驱动）
+        // 处理 Range 请求
         const rangeHeader = request.headers.get("Range");
         if (rangeHeader) {
           console.log(`🎬 分享下载 - 代理 Range 请求: ${rangeHeader}`);
         }
 
-        // 通过 ObjectStore 封装的 storage-first 视图进行下载代理
-        const objectStore = new ObjectStore(this.db, this.encryptionSecret, this.repositoryFactory);
-        const driverResponse = await objectStore.downloadByStoragePath(fileRecord.storage_config_id, fileRecord.storage_path, {
+        // 使用 StorageStreaming 层统一处理内容访问
+        const streaming = new StorageStreaming({
+          mountManager: null, // 存储路径模式不需要 mountManager
+          storageFactory: StorageFactory,
+          encryptionSecret: this.encryptionSecret,
+        });
+
+        const response = await streaming.createResponse({
+          path: fileRecord.storage_path,
+          channel: STREAMING_CHANNELS.SHARE,
+          storageConfigId: fileRecord.storage_config_id,
+          rangeHeader,
           request,
+          db: this.db,
+          repositoryFactory: this.repositoryFactory,
         });
 
         // 基于文件记录重新计算 Content-Type / Content-Disposition，保持分享层一致性
@@ -150,22 +169,28 @@ export class FileViewService {
           { forceDownload }
         );
 
-        const responseHeaders = new Headers(driverResponse.headers || {});
-        responseHeaders.set("Content-Type", finalContentType);
-        responseHeaders.set("Content-Disposition", contentDisposition);
+        // 更新响应头
+        response.headers.set("Content-Type", finalContentType);
+        response.headers.set("Content-Disposition", contentDisposition);
 
         // 设置CORS头部
-        responseHeaders.set("Access-Control-Allow-Origin", "*");
-        responseHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
-        responseHeaders.set("Access-Control-Allow-Headers", "Range, Content-Type");
-        responseHeaders.set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges");
+        response.headers.set("Access-Control-Allow-Origin", "*");
+        response.headers.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+        response.headers.set("Access-Control-Allow-Headers", "Range, Content-Type");
+        response.headers.set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges");
 
-        return new Response(driverResponse.body, {
-          status: driverResponse.status,
-          statusText: driverResponse.statusText,
-          headers: responseHeaders,
-        });
+        return response;
       };
+
+      // forceProxy=true 时，强制只走本地代理（share 的 /api/s 与 /api/share/content）
+      if (forceProxy) {
+        return await proxyDownload();
+      }
+
+      // 文本类 inline 预览，无论 use_proxy 配置如何，都优先走本地代理访问
+      if (isInline && isTextLike) {
+        return await proxyDownload();
+      }
 
       // use_proxy = 1 时，走本地代理访问
       if (useProxyFlag === 1) {
@@ -204,9 +229,17 @@ export class FileViewService {
 }
 
 // 导出便捷函数供路由使用
-export async function handleFileDownload(slug, db, encryptionSecret, request, forceDownload = false, repositoryFactory = null) {
+export async function handleFileDownload(
+  slug,
+  db,
+  encryptionSecret,
+  request,
+  forceDownload = false,
+  repositoryFactory = null,
+  options = {},
+) {
   const service = new FileViewService(db, encryptionSecret, repositoryFactory);
-  return service.handleFileDownload(slug, request, forceDownload);
+  return service.handleFileDownload(slug, request, forceDownload, options);
 }
 
 export async function checkAndDeleteExpiredFile(db, file, encryptionSecret, repositoryFactory = null) {

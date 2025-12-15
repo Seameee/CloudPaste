@@ -19,8 +19,10 @@ export default {
     operations: {
       upload: "Upload",
       createFolder: "New Folder",
-      tasks: "Tasks",
       refresh: "Refresh",
+      viewMode: "View Mode",
+      batchOperations: "Batch Operations",
+      tasks: "Task List",
     },
     createFolder: {
       enterName: "Please enter folder name",
@@ -34,6 +36,42 @@ export default {
       list: "List View",
       grid: "Grid View",
       gallery: "Gallery View",
+    },
+    // Settings drawer
+    settings: {
+      title: "Local Settings",
+      viewMode: "View Mode",
+      listView: "List",
+      gridView: "Grid",
+      galleryView: "Gallery",
+      density: "Display Density",
+      densityCompact: "Compact",
+      densityComfortable: "Comfortable",
+      densitySpacious: "Spacious",
+      displayOptions: "Display Options",
+      showCheckboxes: "Show Checkboxes",
+      sorting: "Sorting",
+      sortBy: "Sort By",
+      sortByName: "Name",
+      sortBySize: "Size",
+      sortByModified: "Modified Time",
+      sortByType: "Type",
+      sortOrder: "Sort Order",
+      ascending: "Ascending",
+      descending: "Descending",
+      foldersFirst: "Folders First",
+      animations: "Animations",
+      enableAnimations: "Enable Animations",
+      showActionButtons: "Show Action Buttons",
+      itemSpacing: "Item Spacing",
+      spacingCompact: "Compact",
+      spacingStandard: "Standard",
+      spacingRelaxed: "Relaxed",
+      fileNameDisplay: "File Name Display",
+      fileNameEllipsis: "Ellipsis Truncation",
+      fileNameScroll: "Scroll on Hover",
+      fileNameWrap: "Auto Wrap",
+      resetToDefault: "Reset to Default",
     },
     fileList: {
       loading: "Loading...",
@@ -54,6 +92,8 @@ export default {
       newName: "New Name",
       cancel: "Cancel",
       confirm: "Confirm",
+      renaming: "Renaming...",
+      failed: "Rename failed",
     },
     delete: {
       title: "Confirm Delete",
@@ -178,6 +218,8 @@ export default {
       cancel: "Cancel",
       confirmCopy: "Confirm Copy",
       copying: "Copying...",
+      skipExisting: "Skip existing files",
+      skipExistingTooltip: "Skip copying if a file with the same name already exists at the target location",
       warnings: {
         recursiveCopy: "Warning: Cannot copy folder to itself or its subdirectories, this may cause infinite recursion.",
         selfCopy: "Warning: Cannot copy folder to itself.",
@@ -194,6 +236,26 @@ export default {
       move: "Move",
       properties: "Properties",
     },
+    contextMenu: {
+      addToBasket: "Add to File Basket",
+      batchDownload: "Batch Download",
+      batchCopy: "Batch Copy",
+      batchAddToBasket: "Batch Add to Basket",
+      batchDelete: "Batch Delete",
+      showCheckboxes: "Show Checkboxes",
+      hideCheckboxes: "Hide Checkboxes",
+    },
+    toolbar: {
+      more: "More Actions",
+      collapse: "Collapse",
+      refresh: "Refresh",
+      newFolder: "New Folder",
+      upload: "Upload Files",
+      showCheckboxes: "Show Checkboxes",
+      hideCheckboxes: "Hide Checkboxes",
+      tasks: "Task List",
+      settings: "Settings",
+    },
     audioPreview: {
       loadingAudio: "Loading...",
       audioPlayer: "Audio Player",
@@ -204,6 +266,24 @@ export default {
     },
     textPreview: {
       loadingText: "Loading...",
+    },
+    taskList: {
+      title: "Task List",
+      loading: "Loading tasks...",
+      empty: "No tasks",
+      status: {
+        pending: "Pending",
+        failed: "Failed",
+        cancelled: "Cancelled",
+      },
+      cancel: "Cancel",
+      itemsFailed: " failed",
+      unknownFile: "Unknown file",
+      viewFullManagement: "View Full Task Management",
+      retry: {
+        retryCount: "Retried {count} times",
+        withRetry: "(retried {count}x)",
+      },
     },
     taskManager: {
       title: "Task Manager",
@@ -257,6 +337,7 @@ export default {
       unknownTime: "Unknown time",
       copyTaskName: "Copy {count} items to {path}",
       copyStarted: "Started copying {count} items to {path}, check progress in task manager",
+      taskCompletedRefresh: "Task completed, directory refreshed",
       // File status
       fileStatus: {
         pending: "Pending",
@@ -334,18 +415,6 @@ export default {
   breadcrumb: {
     navigation: "Breadcrumb Navigation",
     root: "Root Directory",
-    batchOperations: "Batch Operations",
-    enableSelection: "Enable Selection",
-    exitSelection: "Exit Selection",
-    copySelected: "Copy Selected",
-    deleteSelected: "Delete Selected",
-    selectedCount: "({count})",
-    // Mobile short text
-    mobile: {
-      enableSelection: "Select",
-      exitSelection: "Exit",
-      copySelected: "Copy",
-      deleteSelected: "Delete",
-    },
+    exitSelection: "Exit Selection", // Only keep this one, used in FloatingActionBar
   },
 };

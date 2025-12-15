@@ -2,12 +2,45 @@
  * TemplateStorageDriver
  *
  * 官方存储驱动模板：
- * - 仅作为“如何实现 storage-driver 契约”的示例与脚手架
+ * - 仅作为"如何实现 storage-driver 契约"的示例与脚手架
  * - 不会被 StorageFactory 注册或在生产环境中直接使用
  *
  * 使用方式：
  * - 新增驱动时建议复制本文件，替换类名与 type，并按注释逐个实现方法；
  * - 根据目标后端实际能力调整 this.capabilities（例如是否支持 DIRECT_LINK / PROXY / MULTIPART）；
+ *
+ * ========== 返回值契约规范（所有驱动必须遵循）==========
+ *
+ * renameItem: 返回 { success: boolean, source: string, target: string, message?: string }
+ * copyItem:   返回 { status: "success"|"skipped"|"failed", source: string, target: string, message?: string, skipped?: boolean, reason?: string }
+ * batchRemoveItems: 返回 { success: number, failed: Array<{path, error}>, results?: Array<{path, success, error?}> }
+ * uploadFile: 返回 { success: boolean, storagePath: string, message?: string }
+ * createDirectory: 返回 { success: boolean, path: string, alreadyExists?: boolean }
+ * listDirectory: 返回 { path, type: "directory", isRoot, isVirtual, mount_id?, storage_type?, items: Array<FileInfo> }
+ * getFileInfo: 返回 { path, name, isDirectory, size, modified, mimetype?, type, typeName, mount_id?, storage_type? }
+ * downloadFile: 返回 StorageStreamDescriptor 对象
+ * StreamHandle 结构：
+ * - stream: NodeReadable | ReadableStream  - 可读流（Node 环境用 NodeReadable，Worker 用 ReadableStream）
+ * - close(): Promise<void>                 - 显式关闭方法
+ * - Node 环境下优先使用 NodeReadable（避免 WebStreams 桥接问题）
+ * - getRange 为可选实现，未实现时 StorageStreaming 层会降级处理
+ *
+ * ========== 统一抽象==========
+ *
+ * 1）FileInfo 构造统一规范（backend/src/storage/utils/FileInfoBuilder.js）
+ *   - listDirectory / getFileInfo / search 等场景应通过 buildFileInfo 构造 FileInfo：
+ *     - 传入：fsPath、name、isDirectory、size、modified、mimetype、mount、storageType、db
+ *     - 禁止在驱动内部手动拼装 { path/name/isDirectory/size/modified/mimetype/type/typeName/mount_id/storage_type }，
+ *       所有类型与显示名称推断统一交给 FileInfoBuilder 处理。
+ *
+ * 2）下载流 StorageStreamDescriptor 统一规范（backend/src/storage/streaming/StreamDescriptorUtils.js）
+ *   - 本地文件（Node）：使用 createNodeStreamDescriptor({ openStream, openRangeStream?, size, contentType, etag, lastModified })
+ *   - HTTP/WebDAV：使用 createHttpStreamDescriptor({ fetchResponse, size?, contentType?, etag?, lastModified?, supportsRange? })
+ *   - Provider SDK 返回 Web ReadableStream（如 S3 / OneDrive / GoogleDrive）：
+ *     - 优先使用 createWebStreamDescriptor({ openStream, size?, contentType?, etag?, lastModified? })
+ *     - 或按需使用 createGenericStreamDescriptor({ stream, size?, contentType?, etag?, lastModified? })
+ *   - downloadFile 只负责调用后端 SDK / HTTP 接口，返回上述工厂函数构造的 StorageStreamDescriptor，
+ *     Range / 条件请求 / 软切片等细节统一由 StorageStreaming 层处理。
  */
 
 import { BaseDriver } from "../../interfaces/capabilities/BaseDriver.js";
@@ -22,7 +55,7 @@ export class TemplateStorageDriver extends BaseDriver {
     super(config);
     this.type = "TEMPLATE";
     this.encryptionSecret = encryptionSecret;
-    // 默认模板给出 READER + WRITER 能力示例，开发者可根据需要追加 DIRECT_LINK / PROXY / MULTIPART 等
+    // 默认模板给出 READER + WRITER 能力示例，开发者可根据需要追加 DIRECT_LINK / PROXY / MULTIPART / ATOMIC 等
     this.capabilities = [CAPABILITIES.READER, CAPABILITIES.WRITER];
   }
 
@@ -58,13 +91,17 @@ export class TemplateStorageDriver extends BaseDriver {
   }
 
   /**
-   * 下载文件，返回 Response/ReadableStream
+   * 下载文件，返回 StorageStreamDescriptor
+   * Node 环境下优先使用 NodeReadable（fs.createReadStream 等）
+   * Worker 环境下使用 Web ReadableStream
+   *
    * @param {string} path    挂载视图下的路径
    * @param {Object} options 上下文选项（mount/subPath/db/request 等）
+   * @returns {Promise<import('../../streaming/types.js').StorageStreamDescriptor>}
    */
   async downloadFile(path, options = {}) {
     this._ensureInitialized();
-    throw new Error("TemplateStorageDriver: 请在此实现 downloadFile 逻辑（参考 S3/WebDAV 驱动的下载实现）");
+    throw new Error("TemplateStorageDriver: 请在此实现 downloadFile 逻辑，返回 StorageStreamDescriptor（参考 LocalStorageDriver 的实现）");
   }
 
   // ========== WRITER 能力：uploadFile / createDirectory / rename / copy / remove ==========
@@ -122,14 +159,41 @@ export class TemplateStorageDriver extends BaseDriver {
     throw new Error("TemplateStorageDriver: 请在此实现 copyItem 逻辑");
   }
 
+  // ========== 可选方法：search / getStats ==========
+
   /**
-   * 批量复制文件/目录
-   * @param {Array<Object>} items 复制项数组
-   * @param {Object} options      上下文选项
+   * 搜索文件和目录（可选实现）
+   * @param {string} query    搜索关键词
+   * @param {Object} options  选项（mount/searchPath/maxResults/db）
    */
-  async batchCopyItems(items, options = {}) {
+  async search(query, options = {}) {
     this._ensureInitialized();
-    throw new Error("TemplateStorageDriver: 请在此实现 batchCopyItems 逻辑");
+    // 默认返回空数组，驱动可根据后端能力实现搜索逻辑
+    return [];
+  }
+
+  /**
+   * 获取存储驱动统计信息（可选实现）
+   * @returns {Promise<Object>} 统计信息
+   */
+  async getStats() {
+    this._ensureInitialized();
+    return {
+      type: this.type,
+      capabilities: this.capabilities,
+      initialized: this.initialized,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * 基础存在性检查（必需契约）
+   * - 建议：对象存储用 HeadObject/Stat，WebDAV 用 PROPFIND/exists
+   * - 返回 boolean；异常时可选择返回 false 或抛出 DriverError 交由上层处理
+   */
+  async exists(path, options = {}) {
+    this._ensureInitialized();
+    throw new Error("TemplateStorageDriver: 请实现 exists 逻辑（HEAD/STAT/PROPFIND 等）并返回 boolean");
   }
 
   // ========== DIRECT_LINK 能力（可选）：generateDownloadUrl ==========
@@ -163,32 +227,31 @@ export class TemplateStorageDriver extends BaseDriver {
 
   async initializeFrontendMultipartUpload(subPath, options = {}) {
     this._ensureInitialized();
-    throw new Error("TemplateStorageDriver: 如需支持前端分片上传，请实现 initializeFrontendMultipartUpload");
+    throw new Error("TemplateStorageDriver: 请在此根据目标后端实现 initializeFrontendMultipartUpload（参考 MultipartCapable 契约文档）");
   }
 
   async completeFrontendMultipartUpload(subPath, options = {}) {
     this._ensureInitialized();
-    throw new Error("TemplateStorageDriver: 如需支持前端分片上传，请实现 completeFrontendMultipartUpload");
+    throw new Error("TemplateStorageDriver: 请在此根据目标后端实现 completeFrontendMultipartUpload（参考 MultipartCapable 契约文档）");
   }
 
   async abortFrontendMultipartUpload(subPath, options = {}) {
     this._ensureInitialized();
-    throw new Error("TemplateStorageDriver: 如需支持前端分片上传，请实现 abortFrontendMultipartUpload");
+    throw new Error("TemplateStorageDriver: 请在此根据目标后端实现 abortFrontendMultipartUpload（参考 MultipartCapable 契约文档）");
   }
 
   async listMultipartUploads(subPath = "", options = {}) {
     this._ensureInitialized();
-    throw new Error("TemplateStorageDriver: 如需支持前端分片上传，请实现 listMultipartUploads");
+    throw new Error("TemplateStorageDriver: 请在此根据目标后端实现 listMultipartUploads（用于断点续传场景）");
   }
 
   async listMultipartParts(subPath, uploadId, options = {}) {
     this._ensureInitialized();
-    throw new Error("TemplateStorageDriver: 如需支持前端分片上传，请实现 listMultipartParts");
+    throw new Error("TemplateStorageDriver: 请在此根据目标后端实现 listMultipartParts（用于恢复已上传分片）");
   }
 
   async refreshMultipartUrls(subPath, uploadId, partNumbers, options = {}) {
     this._ensureInitialized();
-    throw new Error("TemplateStorageDriver: 如需支持前端分片上传，请实现 refreshMultipartUrls");
+    throw new Error("TemplateStorageDriver: 请在此根据目标后端实现 refreshMultipartUrls（刷新上传端点或会话信息）");
   }
 }
-

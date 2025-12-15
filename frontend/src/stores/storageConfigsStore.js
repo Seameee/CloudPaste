@@ -23,6 +23,17 @@ const STORAGE_TYPE_SCHEMA = {
       preview: "signed-url",
     },
   },
+  ONEDRIVE: {
+    type: "ONEDRIVE",
+    label: "OneDrive 存储",
+    description: "基于 Microsoft OneDrive / Graph API 的云存储，支持预签名直传",
+    capabilities: {
+      multipart: false,
+      presigned: true,
+      requiresProxy: false,
+      preview: "signed-url",
+    },
+  },
   WEBDAV: {
     type: "WEBDAV",
     label: "WebDAV",
@@ -40,6 +51,17 @@ const STORAGE_TYPE_SCHEMA = {
     description: "直接挂载服务器本地磁盘，通常仅用于自托管",
     capabilities: {
       multipart: false,
+      presigned: false,
+      requiresProxy: true,
+      preview: "proxy",
+    },
+  },
+  GOOGLE_DRIVE: {
+    type: "GOOGLE_DRIVE",
+    label: "Google Drive 存储",
+    description: "基于 Google Drive API 的云存储，支持 sharedWithMe 视图与单会话分片上传",
+    capabilities: {
+      multipart: true,
       presigned: false,
       requiresProxy: true,
       preview: "proxy",

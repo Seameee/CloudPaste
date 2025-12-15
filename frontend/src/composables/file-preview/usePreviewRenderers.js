@@ -4,7 +4,6 @@
  */
 
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import { createAuthenticatedPreviewUrl } from "@/api/services/fileDownloadService.js";
 import { formatDateTime } from "@/utils/timeUtils.js";
 import { formatFileSize as formatFileSizeUtil, FileType, isArchiveFile } from "@/utils/fileTypes.js";
 
@@ -42,9 +41,7 @@ export function usePreviewRenderers(file, emit, darkMode) {
     };
   });
 
-  /**
-   * 文件类型判断计算属性 - 直接使用后端type字段
-   */
+  // 文件类型判断计算属性 - 直接依赖后端返回的枚举类型
   const isImageFile = computed(() => file.value?.type === FileType.IMAGE);
   const isVideoFile = computed(() => file.value?.type === FileType.VIDEO);
   const isAudioFile = computed(() => file.value?.type === FileType.AUDIO);
@@ -52,29 +49,20 @@ export function usePreviewRenderers(file, emit, darkMode) {
   const isTextFile = computed(() => file.value?.type === FileType.TEXT);
 
   // 基于文件类型的判断
-  const isPdfFile = computed(() => {
-    return file.value?.type === FileType.DOCUMENT;
-  });
+  const isPdfFile = computed(() => file.value?.type === FileType.DOCUMENT);
 
   /**
-   * 预览URL - 基于 Link JSON 中的 rawUrl
-   * 在 FS 视图下由后端统一构造为最终可访问的直链或代理URL
+   * 预览URL - 基于 Link JSON 中的 previewUrl
+   * 在 FS 视图下由后端统一构造为最终可访问的 inline 入口
    */
   const previewUrl = computed(() => {
     if (!file.value) return "";
-
-    if (file.value.rawUrl) {
-      console.log("使用文件信息中的 rawUrl 作为预览入口:", file.value.rawUrl);
-      return file.value.rawUrl;
-    }
-
-    console.error("文件信息中没有 rawUrl 字段，请检查后端 /api/fs/get 实现");
-    return "";
+    return file.value.previewUrl || "";
   });
 
   /**
    * 获取认证预览URL（保留方法以兼容可能的工具场景）
-   * FS 视图下默认直接使用 rawUrl，正常预览不再依赖 Blob 模式
+   * FS 视图下默认直接使用 previewUrl，正常预览不再依赖 Blob 模式
    */
   const fetchAuthenticatedUrl = async () => {
     const url = previewUrl.value;
@@ -341,7 +329,7 @@ export function usePreviewRenderers(file, emit, darkMode) {
           typeChecks.isText ||
           (file.value?.name && isArchiveFile(file.value.name))
         ) {
-          // 直接使用 rawUrl 作为预览入口
+          // 直接使用 previewUrl 作为预览入口
           authenticatedPreviewUrl.value = previewUrl.value;
         }
 

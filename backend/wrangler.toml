@@ -21,3 +21,14 @@ ADMIN_TOKEN_EXPIRY_DAYS = "7"
 binding = "DB"
 database_name = "cloudpaste-db"
 database_id = "xxxxxxxxxxxxxxxxx"
+
+# Cloudflare Workflows 绑定
+# 用于异步任务作业的持久化执行
+[[workflows]]
+binding = "JOB_WORKFLOW"
+name = "job-workflow"
+class_name = "JobWorkflow"
+
+[triggers]
+crons = ["*/5 * * * *"]
+

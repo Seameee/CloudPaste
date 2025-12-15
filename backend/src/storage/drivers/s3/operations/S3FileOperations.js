@@ -5,13 +5,21 @@
 
 import { AppError, NotFoundError, ConflictError, ValidationError, S3DriverError } from "../../../../http/errors.js";
 import { generateDownloadUrl, createS3Client } from "../utils/s3Utils.js";
-import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command, CopyObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  ListObjectsV2Command,
+  CopyObjectCommand,
+  HeadObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getMimeTypeFromFilename } from "../../../../utils/fileUtils.js";
 import { handleFsError } from "../../../fs/utils/ErrorHandler.js";
 import { updateParentDirectoriesModifiedTime } from "../utils/S3DirectoryUtils.js";
 import { CAPABILITIES } from "../../../interfaces/capabilities/index.js";
-import { GetFileType, getFileTypeName } from "../../../../utils/fileTypeDetector.js";
-import { FILE_TYPES, FILE_TYPE_NAMES } from "../../../../constants/index.js";
+import { buildFileInfo } from "../../../utils/FileInfoBuilder.js";
+import { createWebStreamDescriptor } from "../../../streaming/StreamDescriptorUtils.js";
 
 export class S3FileOperations {
   /**
@@ -29,101 +37,70 @@ export class S3FileOperations {
   }
 
   /**
-   * 从S3获取文件内容
+   * 从S3获取文件内容（返回 StorageStreamDescriptor）
    * @param {Object} s3Config - S3配置对象
    * @param {string} s3SubPath - S3子路径
    * @param {string} fileName - 文件名
-   * @param {boolean} forceDownload - 是否强制下载
+   * @param {boolean} forceDownload - 是否强制下载（已废弃，由上层处理）
    * @param {string} encryptionSecret - 加密密钥
-   * @param {Request} request - 请求对象，用于获取Range头
-   * @returns {Promise<Response>} 文件内容响应
+   * @param {Request} request - 请求对象（已废弃，Range 由上层处理）
+   * @returns {Promise<import('../../../streaming/types.js').StorageStreamDescriptor>} 流描述对象
    */
   async getFileFromS3(s3Config, s3SubPath, fileName, forceDownload = false, encryptionSecret, request = null) {
+    const s3Client = await createS3Client(s3Config, encryptionSecret);
+    const key = s3SubPath.startsWith("/") ? s3SubPath.slice(1) : s3SubPath;
+
+    // 先获取文件元数据
+    let metadata;
     try {
-      const s3Client = await createS3Client(s3Config, encryptionSecret);
-
-      // 构建GetObject参数
-      const getParams = {
+      const headCommand = new HeadObjectCommand({
         Bucket: s3Config.bucket_name,
-        Key: s3SubPath.startsWith("/") ? s3SubPath.slice(1) : s3SubPath,
-      };
-
-      // 处理Range请求（用于视频流等）
-      if (request) {
-        const rangeHeader = request.headers.get("range");
-        if (rangeHeader) {
-          getParams.Range = rangeHeader;
-          console.log(`[S3FileOperations] Range请求: ${rangeHeader} -> ${s3SubPath}`);
-        }
-      }
-
-      // 使用AWS SDK v3的GetObjectCommand
-      const getCommand = new GetObjectCommand(getParams);
-      const response = await s3Client.send(getCommand);
-
-      // 获取内容类型
-      const contentType = response.ContentType || getMimeTypeFromFilename(fileName);
-
-      // 构建响应头
-      const headers = new Headers();
-      headers.set("Content-Type", contentType);
-      headers.set("Content-Length", response.ContentLength?.toString() || "0");
-
-      // 检查是否为Range请求响应
-      const contentRange = response.ContentRange;
-      const isRangeResponse = !!contentRange;
-
-      // 设置缓存控制 - Range请求使用较短的缓存时间
-      if (isRangeResponse) {
-        headers.set("Cache-Control", "public, max-age=3600"); // Range请求1小时缓存
-      }
-
-      // 处理下载
-      if (forceDownload) {
-        headers.set("Content-Disposition", `attachment; filename="${encodeURIComponent(fileName)}"`);
-      } else {
-        // 对于某些文件类型，设置为inline显示
-        if (contentType.startsWith("image/") || contentType.startsWith("video/") || contentType === "application/pdf") {
-          headers.set("Content-Disposition", `inline; filename="${encodeURIComponent(fileName)}"`);
-        }
-      }
-
-      // 处理Range响应 - 确保传递所有Range相关头部
-      if (contentRange) {
-        headers.set("Content-Range", contentRange);
-        console.log(`[S3FileOperations] Range响应: ${contentRange}`);
-      }
-
-      // 始终设置Accept-Ranges以支持Range请求
-      headers.set("Accept-Ranges", "bytes");
-
-      // 设置ETag
-      if (response.ETag) {
-        headers.set("ETag", response.ETag);
-      }
-
-      // 设置Last-Modified
-      if (response.LastModified) {
-        headers.set("Last-Modified", response.LastModified.toUTCString());
-      }
-
-      // 返回Response，AWS SDK v3成功响应状态码为200或206
-      const statusCode = isRangeResponse ? 206 : 200;
-      return new Response(response.Body, {
-        status: statusCode,
-        headers,
+        Key: key,
       });
+      metadata = await s3Client.send(headCommand);
     } catch (error) {
-      console.error("从S3获取文件失败:", error);
-
-      if (error instanceof AppError) {
-        throw error;
-      }
       if (error?.$metadata?.httpStatusCode === 404) {
         throw new NotFoundError("文件不存在");
       }
-      throw new S3DriverError("获取文件失败", { details: { cause: error?.message } });
+      throw new S3DriverError("获取文件元数据失败", { details: { cause: error?.message } });
     }
+
+    const contentType = metadata.ContentType || getMimeTypeFromFilename(fileName);
+    const size = metadata.ContentLength ?? null;
+    const etag = metadata.ETag ?? null;
+    const lastModified = metadata.LastModified ? new Date(metadata.LastModified) : null;
+
+    // 使用统一的 Web 流描述构造器
+    return createWebStreamDescriptor({
+      size,
+      contentType,
+      etag,
+      lastModified,
+      async openStream(signal) {
+        try {
+          const getCommand = new GetObjectCommand({
+            Bucket: s3Config.bucket_name,
+            Key: key,
+          });
+          const response = await s3Client.send(getCommand, signal ? { abortSignal: signal } : undefined);
+
+          const stream = response.Body;
+          if (!stream) {
+            throw new S3DriverError("获取文件流失败: 响应 Body 为空");
+          }
+
+          return stream;
+        } catch (error) {
+          if (error instanceof AppError) {
+            throw error;
+          }
+          if (error?.$metadata?.httpStatusCode === 404) {
+            throw new NotFoundError("文件不存在");
+          }
+          throw new S3DriverError("获取文件流失败", { details: { cause: error?.message } });
+        }
+      },
+    });
   }
 
   /**
@@ -163,22 +140,21 @@ export class S3FileOperations {
           // 检查是否为目录：基于Key是否以'/'结尾判断
           const isDirectory = exactMatch.Key.endsWith("/");
 
-          const fileType = isDirectory ? FILE_TYPES.FOLDER : await GetFileType(fileName, db);
-          const fileTypeName = isDirectory ? FILE_TYPE_NAMES[FILE_TYPES.FOLDER] : await getFileTypeName(fileName, db);
-          const detectedMimeType = isDirectory ? "application/x-directory" : getMimeTypeFromFilename(fileName);
+          const info = await buildFileInfo({
+            fsPath: path,
+            name: fileName,
+            isDirectory,
+            size: isDirectory ? 0 : exactMatch.Size || 0,
+            modified: exactMatch.LastModified ? exactMatch.LastModified : new Date(),
+            mimetype: isDirectory ? "application/x-directory" : getMimeTypeFromFilename(fileName),
+            mount,
+            storageType: mount.storage_type,
+            db,
+          });
 
           const result = {
-            path: path,
-            name: fileName,
-            isDirectory: isDirectory,
-            size: isDirectory ? 0 : exactMatch.Size || 0, // 目录大小为0
-            modified: exactMatch.LastModified ? exactMatch.LastModified.toISOString() : new Date().toISOString(),
-            mimetype: detectedMimeType,
+            ...info,
             etag: exactMatch.ETag ? exactMatch.ETag.replace(/"/g, "") : undefined,
-            mount_id: mount.id,
-            storage_type: mount.storage_type,
-            type: fileType, // 整数类型常量 (0-6)
-            typeName: fileTypeName, // 类型名称（用于调试）
           };
 
           console.log(`getFileInfo - ListObjects 成功获取文件信息: ${result.name}`);
@@ -202,21 +178,21 @@ export class S3FileOperations {
             // 检查是否为目录：基于ContentType判断
             const isDirectory = getResponse.ContentType === "application/x-directory";
 
-            const fileType = isDirectory ? FILE_TYPES.FOLDER : await GetFileType(fileName, db);
-            const fileTypeName = isDirectory ? FILE_TYPE_NAMES[FILE_TYPES.FOLDER] : await getFileTypeName(fileName, db);
+            const info = await buildFileInfo({
+              fsPath: path,
+              name: fileName,
+              isDirectory,
+              size: isDirectory ? 0 : getResponse.ContentLength || 0,
+              modified: getResponse.LastModified ? getResponse.LastModified : new Date(),
+              mimetype: getResponse.ContentType || "application/octet-stream",
+              mount,
+              storageType: mount.storage_type,
+              db,
+            });
 
             const result = {
-              path: path,
-              name: fileName,
-              isDirectory: isDirectory,
-              size: isDirectory ? 0 : getResponse.ContentLength || 0, // 目录大小为0
-              modified: getResponse.LastModified ? getResponse.LastModified.toISOString() : new Date().toISOString(),
-              mimetype: getResponse.ContentType || "application/octet-stream", // 统一使用mimetype字段名
+              ...info,
               etag: getResponse.ETag ? getResponse.ETag.replace(/"/g, "") : undefined,
-              mount_id: mount.id,
-              storage_type: mount.storage_type,
-              type: fileType, // 整数类型常量 (0-6)
-              typeName: fileTypeName, // 类型名称（用于调试）
             };
 
             console.log(`getFileInfo(GET) - 文件[${result.name}], S3 ContentType[${getResponse.ContentType}]`);
@@ -240,8 +216,8 @@ export class S3FileOperations {
    * 下载文件
    * @param {string} s3SubPath - S3子路径
    * @param {string} fileName - 文件名
-   * @param {Request} request - 请求对象
-   * @returns {Promise<Response>} 文件响应
+   * @param {Request} request - 请求对象（已废弃，Range 由上层处理）
+   * @returns {Promise<import('../../../streaming/types.js').StorageStreamDescriptor>} 流描述对象
    */
   async downloadFile(s3SubPath, fileName, request = null) {
     return handleFsError(
@@ -309,20 +285,46 @@ export class S3FileOperations {
    * @returns {Promise<boolean>} 是否存在
    */
   async exists(s3SubPath) {
+    const key = s3SubPath.startsWith("/") ? s3SubPath.slice(1) : s3SubPath;
+    const isDirectory = key === "" || key.endsWith("/");
+
+    // 文件优先使用 HEAD，避免 List 前缀误判
+    if (!isDirectory) {
+      try {
+        const headCommand = new HeadObjectCommand({
+          Bucket: this.config.bucket_name,
+          Key: key,
+        });
+        await this.s3Client.send(headCommand);
+        return true;
+      } catch (error) {
+        const status = error?.$metadata?.httpStatusCode;
+        const code = error?.name || error?.Code;
+        const notFound = status === 404 || code === "NotFound" || code === "NoSuchKey";
+        if (!notFound) {
+          // 非 404 级错误时降级为前缀检查，避免硬失败
+          console.warn("[S3FileOperations.exists] headObject fallback", error?.message || error);
+        }
+      }
+    }
+
+    // 目录或 Head 未命中的情况下，使用前缀列举兜底
     try {
+      const prefix = isDirectory ? key : `${key}/`;
       const listParams = {
         Bucket: this.config.bucket_name,
-        Prefix: s3SubPath,
+        Prefix: prefix,
         MaxKeys: 1,
       };
 
       const listCommand = new ListObjectsV2Command(listParams);
       const listResponse = await this.s3Client.send(listCommand);
 
-      // 检查是否找到精确匹配的文件
-      const exactMatch = listResponse.Contents?.find((item) => item.Key === s3SubPath);
-      return !!exactMatch;
+      const hasObject = (listResponse.Contents?.length || 0) > 0;
+      const hasPrefix = (listResponse.CommonPrefixes?.length || 0) > 0;
+      return hasObject || hasPrefix;
     } catch (error) {
+      console.warn("[S3FileOperations.exists] listObjects fallback failed", error?.message || error);
       return false;
     }
   }

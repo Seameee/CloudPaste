@@ -1,4 +1,5 @@
 import { ref, computed, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { useAdminBase } from "@/composables/admin-management/useAdminBase.js";
 import { useStorageConfigsStore } from "@/stores/storageConfigsStore.js";
 import { useAdminStorageConfigService } from "@/modules/admin/services/storageConfigService.js";
@@ -6,12 +7,20 @@ import { useAdminStorageConfigService } from "@/modules/admin/services/storageCo
 /**
  * 存储配置管理 composable
  * 提供多存储配置的 CRUD、分页管理、测试等能力
+ * @param {Object} options - 可选配置
+ * @param {Function} options.confirmFn - 自定义确认函数，接收 {title, message, confirmType} 参数，返回 Promise<boolean>
  */
-export function useStorageConfigManagement() {
+export function useStorageConfigManagement(options = {}) {
+  const { confirmFn } = options;
+
+  // 国际化
+  const { t } = useI18n();
+
   // 继承基础功能，使用独立的页面标识符
   const base = useAdminBase("storage");
   const storageConfigsStore = useStorageConfigsStore();
-  const { getStorageConfigs, deleteStorageConfig, setDefaultStorageConfig, testStorageConfig } = useAdminStorageConfigService();
+  const { getStorageConfigs, getStorageConfigReveal, deleteStorageConfig, setDefaultStorageConfig, testStorageConfig } =
+    useAdminStorageConfigService();
 
   const STORAGE_TYPE_UNKNOWN = "__UNSPECIFIED__";
 
@@ -146,7 +155,19 @@ export function useStorageConfigManagement() {
    * 删除存储配置
    */
   const handleDeleteConfig = async (configId) => {
-    if (!confirm("确定要删除此存储配置吗？此操作不可恢复！")) {
+    // 使用传入的确认函数或默认的 window.confirm
+    let confirmed;
+    if (confirmFn) {
+      confirmed = await confirmFn({
+        title: t("common.dialogs.deleteTitle"),
+        message: t("common.dialogs.deleteItem", { name: t("admin.storage.item", "此存储配置") }),
+        confirmType: "danger",
+      });
+    } else {
+      confirmed = confirm(t("common.dialogs.deleteItem", { name: t("admin.storage.item", "此存储配置") }));
+    }
+
+    if (!confirmed) {
       return;
     }
 
@@ -168,12 +189,35 @@ export function useStorageConfigManagement() {
   };
 
   /**
-   * 编辑配置
+   * 编辑配置（使用 masked 模式加载密钥字段）
    */
-  const editConfig = (config) => {
-    currentConfig.value = { ...config };
-    showEditForm.value = true;
-    showAddForm.value = false;
+  const editConfig = async (config) => {
+    try {
+      // 使用 masked 模式重新加载配置，显示掩码占位符
+      const maskedConfig = await getStorageConfigReveal(config.id, "masked");
+      const finalConfig = maskedConfig?.data || maskedConfig || { ...config };
+      
+      // 调试日志：查看掩码字段
+      console.log("编辑配置 - 掩码数据:", {
+        id: finalConfig.id,
+        storage_type: finalConfig.storage_type,
+        access_key_id: finalConfig.access_key_id,
+        secret_access_key: finalConfig.secret_access_key,
+        password: finalConfig.password,
+        client_secret: finalConfig.client_secret,
+        refresh_token: finalConfig.refresh_token,
+      });
+      
+      currentConfig.value = finalConfig;
+      showEditForm.value = true;
+      showAddForm.value = false;
+    } catch (err) {
+      console.error("加载配置失败:", err);
+      // 降级：使用原始配置
+      currentConfig.value = { ...config };
+      showEditForm.value = true;
+      showAddForm.value = false;
+    }
   };
 
   /**
@@ -217,15 +261,79 @@ export function useStorageConfigManagement() {
    */
   class TestResultProcessor {
     constructor(result) {
-      this.result = result;
-      // 识别存储类型：WebDAV有info字段但没有cors/frontendSim，S3有cors/frontendSim但没有info
-      this.isWebDAV = !!(this.result.info && !this.result.cors && !this.result.frontendSim);
+      // 原始结果形态：后端返回 { success, result: {...} } 或 { success, data: { success, result: {...} } }
+      this.raw = result || {};
+
+      // 处理嵌套的 result 结构
+      // 如果有 result 字段，优先使用 result 内容
+      let inner = this.raw;
+      
+      // 检查是否有嵌套的 result 字段（S3/WebDAV 的情况）
+      if (this.raw.result && typeof this.raw.result === 'object') {
+        // LOCAL 测试：result 包含 pathExists/readPermission/writePermission
+        if (this.raw.result.pathExists || this.raw.result.readPermission || this.raw.result.writePermission) {
+          inner = this.raw.result;
+        }
+        // S3/WebDAV 测试：result 包含 read/write/cors/frontendSim/info
+        else if (this.raw.result.read || this.raw.result.write || this.raw.result.cors || 
+                 this.raw.result.frontendSim || this.raw.result.info) {
+          inner = this.raw.result;
+        }
+      }
+
+      this.result = inner || {};
+
+      // 识别存储类型：
+      // - OneDrive：result.info 中包含 driveName/driveType 等 OneDrive 特有字段，且不存在 cors/frontendSim
+      // - LOCAL：有 pathExists/readPermission/writePermission 字段（本地存储特有）
+      // - WebDAV：有 info 字段但没有 cors/frontendSim
+      // - S3：有 cors 或 frontendSim 字段
+      this.isOneDrive = !!(
+        this.result.info &&
+        (this.result.info.driveName || this.result.info.driveType || this.result.info.region) &&
+        !this.result.cors &&
+        !this.result.frontendSim
+      );
+      this.isLocal = !!(this.result.pathExists || this.result.readPermission || this.result.writePermission);
+      this.isWebDAV = !this.isOneDrive && !this.isLocal && !!(this.result.info && !this.result.cors && !this.result.frontendSim);
     }
 
     /**
      * 计算测试状态
      */
     calculateStatus() {
+      // OneDrive：只检查读写权限
+      if (this.isOneDrive) {
+        const basicConnectSuccess = this.result.read?.success === true;
+        const writeSuccess = this.result.write?.success === true;
+        const isFullSuccess = basicConnectSuccess && writeSuccess;
+        const isPartialSuccess = basicConnectSuccess && !writeSuccess;
+        const isSuccess = basicConnectSuccess;
+        return {
+          isFullSuccess,
+          isPartialSuccess,
+          isSuccess,
+        };
+      }
+
+      // LOCAL：基于 pathExists / isDirectory / readPermission / writePermission 计算
+      if (this.isLocal) {
+        const pathOk = this.result.pathExists?.success === true;
+        const dirOk = this.result.isDirectory?.success === true;
+        const readOk = this.result.readPermission?.success === true;
+        const writeOk = this.result.writePermission?.success === true;
+
+        const isFullSuccess = pathOk && dirOk && readOk && writeOk;
+        const isPartialSuccess = pathOk && dirOk && readOk && !writeOk;
+        const isSuccess = isFullSuccess || isPartialSuccess;
+
+        return {
+          isFullSuccess,
+          isPartialSuccess,
+          isSuccess,
+        };
+      }
+
       const basicConnectSuccess = this.result.read?.success === true;
       const writeSuccess = this.result.write?.success === true;
 
@@ -261,15 +369,18 @@ export function useStorageConfigManagement() {
      * 生成状态消息
      */
     generateStatusMessage() {
-      const status = this.calculateStatus();
-
-      if (status.isFullSuccess) {
-        return "连接测试完全成功";
-      } else if (status.isPartialSuccess) {
-        return "连接测试部分成功";
-      } else {
-        return "连接测试失败";
+      // 优先使用后端返回的 message，保持与各驱动 tester 的语义一致
+      const backendMessage =
+        this.raw && typeof this.raw.message === "string" ? this.raw.message.trim() : "";
+      if (backendMessage) {
+        return backendMessage;
       }
+
+      // 后端未提供 message 时，再根据本地计算状态给一个兜底提示
+      const status = this.calculateStatus();
+      if (status.isFullSuccess) return "连接测试成功";
+      if (status.isPartialSuccess) return "连接测试部分成功";
+      return "连接测试失败";
     }
 
     /**
@@ -277,6 +388,89 @@ export function useStorageConfigManagement() {
      */
     generateDetailsMessage() {
       const details = [];
+
+      // OneDrive 测试详情
+      if (this.isOneDrive) {
+        // 读权限
+        if (this.result.read?.success) {
+          details.push("✓ 读权限正常");
+        } else {
+          details.push("✗ 读权限失败");
+          if (this.result.read?.error) {
+            details.push(`  ${this.result.read.error.split("\n")[0]}`);
+          }
+        }
+
+        // 写权限
+        if (this.result.write?.success) {
+          details.push("✓ 写权限正常");
+        } else {
+          details.push("✗ 写权限失败");
+          if (this.result.write?.error) {
+            details.push(`  ${this.result.write.error.split("\n")[0]}`);
+          }
+        }
+
+        const d = this.result.info || {};
+        if (d.defaultFolder) {
+          details.push(`✓ 默认上传目录: ${d.defaultFolder}`);
+        }
+        if (d.driveName) {
+          details.push(`✓ 驱动器: ${d.driveName}`);
+        }
+        if (d.responseTime) {
+          details.push(`✓ 响应时间: ${d.responseTime}`);
+        }
+        return details.join("\n");
+      }
+
+      // LOCAL 测试详情
+      if (this.isLocal) {
+        // 路径与目录检查
+        if (this.result.pathExists?.success) {
+          details.push("✓ 根路径存在");
+        } else {
+          details.push("✗ 根路径不存在");
+          if (this.result.pathExists?.error) {
+            details.push(`  ${this.result.pathExists.error.split("\n")[0]}`);
+          }
+        }
+
+        if (this.result.isDirectory?.success) {
+          details.push("✓ 根路径是目录");
+        } else {
+          details.push("✗ 根路径不是目录");
+          if (this.result.isDirectory?.error) {
+            details.push(`  ${this.result.isDirectory.error.split("\n")[0]}`);
+          }
+        }
+
+        // 读权限
+        if (this.result.readPermission?.success) {
+          details.push("✓ 读权限正常");
+        } else {
+          details.push("✗ 读权限失败");
+          if (this.result.readPermission?.error) {
+            details.push(`  ${this.result.readPermission.error.split("\n")[0]}`);
+          }
+        }
+
+        // 写权限
+        if (this.result.writePermission?.success) {
+          if (this.result.writePermission?.note) {
+            details.push(`✓ 写权限正常（${this.result.writePermission.note}）`);
+          } else {
+            details.push("✓ 写权限正常");
+          }
+        } else {
+          details.push("✗ 写权限失败");
+          if (this.result.writePermission?.error) {
+            details.push(`  ${this.result.writePermission.error.split("\n")[0]}`);
+          }
+        }
+
+        return details.join("\n");
+      }
 
       // 读权限状态 - 简洁显示
       if (this.result.read?.success) {
@@ -382,19 +576,86 @@ export function useStorageConfigManagement() {
   /**
    * 获取提供商图标
    */
-  const getProviderIcon = (providerType) => {
-    switch (providerType) {
-      case "Cloudflare R2":
-        return "M11 16.5l11 7v-14.5m-11 7.5v-13l-11 6.5 11 6.5z";
-      case "Backblaze B2":
-        return "M4 4v16a2 2 0 002 2h12a2 2 0 002-2V8.342a2 2 0 00-.602-1.43l-4.44-4.342A2 2 0 0013.56 2H6a2 2 0 00-2 2zm5 9v-3a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1z";
-      case "AWS S3":
-        return "M5 16.577l2.194-2.195 2.194 2.195L5 20.772l-4.388-4.195 2.194-2.195 2.194 2.195zM5 4.822l2.194 2.195L5 9.211 2.806 7.017 5 4.822zM12 0l2.194 2.195L12 4.389 9.806 2.195 12 0zM5 11.211l2.194 2.195-2.194 2.194-2.194-2.194L5 11.211zM12 7.017l4.389-4.195 4.388 4.195-4.388 4.194-4.389-4.194z";
-      case "Aliyun OSS":
-        return "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z";
-      default:
-        return "M3 19h18a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z";
+  const getProviderIcon = (storageType, providerType = null) => {
+    // S3存储类型：根据provider_type细分图标和颜色
+    if (storageType === 'S3' && providerType) {
+      const s3ProviderIcons = {
+        // Cloudflare R2 - cloud
+        'Cloudflare R2': {
+          path: 'M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z',
+          color: 'text-orange-500'
+        },
+        
+        // Backblaze B2 - archive-box
+        'Backblaze B2': {
+          path: 'M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z',
+          color: 'text-red-500'
+        },
+        
+        // AWS S3 - cube
+        'AWS S3': {
+          path: 'M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9',
+          color: 'text-orange-600'
+        },
+        
+        // 阿里云OSS - cloud-arrow-down
+        'Aliyun OSS': {
+          path: 'M12 9.75v6.75m0 0l-3-3m3 3l3-3m-8.25 6a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z',
+          color: 'text-blue-500'
+        },
+        
+        // 通用S3/Other - circle-stack
+        'Other': {
+          path: 'M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125',
+          color: 'text-gray-500'
+        }
+      };
+      
+      // 返回对应提供商的图标，未匹配则使用Other图标
+      return s3ProviderIcons[providerType] || s3ProviderIcons['Other'];
     }
+    
+    // 其他存储类型的基础图标
+    const baseIcons = {
+      // S3对象存储 - circle-stack
+      'S3': {
+        path: 'M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125',
+        color: 'text-primary-500'
+      },
+      
+      // OneDrive云盘 - cloud-arrow-up
+      'ONEDRIVE': {
+        path: 'M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z',
+        color: 'text-blue-600'
+      },
+      
+      // Google Drive - "G" letter
+      'GOOGLE_DRIVE': {
+        path: 'M12 4C7.58 4 4 7.58 4 12s3.58 8 8 8c4.06 0 7.42-3.03 7.93-6.93H13v-2h9c.05.33.08.66.08 1 0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2c2.76 0 5.26 1.12 7.07 2.93l-1.41 1.41C16.21 4.89 14.21 4 12 4z',
+        color: 'text-red-500'
+      },
+      
+      // WebDAV网络驱动器 - server
+      'WEBDAV': {
+        path: 'M21.75 17.25v-.228a4.5 4.5 0 00-.12-1.03l-2.268-9.64a3.375 3.375 0 00-3.285-2.602H7.923a3.375 3.375 0 00-3.285 2.602l-2.268 9.64a4.5 4.5 0 00-.12 1.03v.228m19.5 0a3 3 0 01-3 3H5.25a3 3 0 01-3-3m19.5 0a3 3 0 00-3-3H5.25a3 3 0 00-3 3m16.5 0h.008v.008h-.008v-.008zm-3 0h.008v.008h-.008v-.008z',
+        color: 'text-purple-500'
+      },
+      
+      // 本地存储 - folder
+      'LOCAL': {
+        path: 'M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z',
+        color: 'text-yellow-500'
+      },
+      
+      // GitHub Releases - tag (版本标签)
+      'GITHUB_RELEASES': {
+        path: 'M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z M6 6h.008v.008H6V6z',
+        color: 'text-emerald-500'
+      }
+    };
+    
+    // 返回对应的图标对象，如果未找到则使用LOCAL图标作为默认
+    return baseIcons[storageType] || baseIcons['LOCAL'];
   };
 
   return {

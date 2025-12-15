@@ -152,6 +152,33 @@ const routes = [
         },
       },
       {
+        path: "scheduled-jobs",
+        name: "AdminScheduledJobs",
+        component: createOfflineAwareImport(() => import("../modules/admin/views/ScheduledJobsView.vue"), "定时任务管理"),
+        meta: {
+          title: "定时任务管理 - CloudPaste",
+          adminOnly: true, // 只有管理员可访问
+        },
+      },
+      {
+        path: "scheduled-jobs/create",
+        name: "AdminScheduledJobCreate",
+        component: createOfflineAwareImport(() => import("../modules/admin/views/ScheduledJobFormView.vue"), "创建定时任务"),
+        meta: {
+          title: "创建定时任务 - CloudPaste",
+          adminOnly: true,
+        },
+      },
+      {
+        path: "scheduled-jobs/:id/edit",
+        name: "AdminScheduledJobEdit",
+        component: createOfflineAwareImport(() => import("../modules/admin/views/ScheduledJobFormView.vue"), "编辑定时任务"),
+        meta: {
+          title: "编辑定时任务 - CloudPaste",
+          adminOnly: true,
+        },
+      },
+      {
         path: "account",
         name: "AdminAccountManagement",
         component: createOfflineAwareImport(() => import("../modules/admin/views/AccountManagementView.vue"), "账号管理"),
@@ -167,6 +194,15 @@ const routes = [
         meta: {
           title: "数据备份 - CloudPaste",
           adminOnly: true, // 只有管理员可访问
+        },
+      },
+      {
+        path: "tasks",
+        name: "AdminTasks",
+        component: createOfflineAwareImport(() => import("../modules/admin/views/AdminTasksView.vue"), "任务管理"),
+        meta: {
+          title: "任务管理 - CloudPaste",
+          requiredPermissions: ["mount"],
         },
       },
       {
@@ -599,6 +635,12 @@ router.afterEach(async (to, from) => {
         break;
       case "AdminSiteSettings":
         title = `${t("pageTitle.adminModules.siteSettings")} - ${siteTitle}`;
+        break;
+      case "AdminBackup":
+        title = `${t("pageTitle.adminModules.backup")} - ${siteTitle}`;
+        break;
+      case "AdminTasks":
+        title = `${t("pageTitle.adminModules.tasks")} - ${siteTitle}`;
         break;
       case "PasteView":
         title = `${t("pageTitle.pasteViewSubtitle")} - ${siteTitle}`;

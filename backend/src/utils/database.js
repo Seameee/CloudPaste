@@ -321,6 +321,235 @@ async function createSystemTables(db) {
     .run();
 }
 
+/**
+ * 创建任务编排相关表
+ * @param {D1Database} db - D1数据库实例
+ */
+async function createTasksTables(db) {
+  console.log("创建任务编排相关表...");
+
+  // 创建 tasks 表 - 通用任务编排表（支持 Workers + Docker）
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS ${DbTables.TASKS} (
+        -- 核心标识
+        task_id TEXT PRIMARY KEY,
+        task_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        stats TEXT NOT NULL DEFAULT '{}',
+        error_message TEXT,
+        user_id TEXT NOT NULL,
+        user_type TEXT NOT NULL,
+        workflow_instance_id TEXT,
+        created_at INTEGER NOT NULL,
+        started_at INTEGER,
+        updated_at INTEGER NOT NULL,
+        finished_at INTEGER
+      )
+    `,
+    )
+    .run();
+
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_tasks_status_created ON ${DbTables.TASKS}(status, created_at DESC)`,
+    )
+    .run();
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_tasks_type_status ON ${DbTables.TASKS}(task_type, status)`,
+    )
+    .run();
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_tasks_user ON ${DbTables.TASKS}(user_id, created_at DESC)`,
+    )
+    .run();
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_tasks_workflow ON ${DbTables.TASKS}(workflow_instance_id) WHERE workflow_instance_id IS NOT NULL`,
+    )
+    .run();
+
+  console.log("任务编排表创建完成");
+}
+
+/**
+ * 创建后台调度作业表（scheduled_jobs）
+ * @param {D1Database} db - D1数据库实例
+ */
+async function createScheduledJobsTables(db) {
+  console.log("创建后台调度作业表 scheduled_jobs...");
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS ${DbTables.SCHEDULED_JOBS} (
+        task_id              TEXT PRIMARY KEY,
+        handler_id           TEXT,
+        name                 TEXT,
+        description          TEXT,
+        enabled              INTEGER NOT NULL,
+        schedule_type        TEXT NOT NULL DEFAULT 'interval',
+        interval_sec         INTEGER,
+        cron_expression      TEXT,
+        run_count            INTEGER NOT NULL DEFAULT 0,
+        failure_count        INTEGER NOT NULL DEFAULT 0,
+        last_run_status      TEXT,
+        last_run_started_at  DATETIME,
+        last_run_finished_at DATETIME,
+        next_run_after       DATETIME,
+        lock_until           DATETIME,
+        config_json          TEXT NOT NULL DEFAULT '{}',
+        created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `,
+    )
+    .run();
+
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_next_run ON ${DbTables.SCHEDULED_JOBS}(enabled, next_run_after)`,
+    )
+    .run();
+
+  console.log("scheduled_jobs 表检查/创建完成");
+}
+
+/**
+ * 创建后台调度作业运行日志表（scheduled_job_runs）
+ * @param {D1Database} db - D1数据库实例
+ */
+async function createScheduledJobRunsTables(db) {
+  console.log("创建后台调度作业运行日志表 scheduled_job_runs...");
+
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS ${DbTables.SCHEDULED_JOB_RUNS} (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id       TEXT NOT NULL,
+        status        TEXT NOT NULL,
+        trigger_type  TEXT,
+        scheduled_at  DATETIME,
+        started_at    DATETIME NOT NULL,
+        finished_at   DATETIME,
+        duration_ms   INTEGER,
+        summary       TEXT,
+        error_message TEXT,
+        details_json  TEXT,
+        created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `,
+    )
+    .run();
+
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_scheduled_job_runs_task_started ON ${DbTables.SCHEDULED_JOB_RUNS}(task_id, started_at DESC)`,
+    )
+    .run();
+
+  console.log("scheduled_job_runs 表检查/创建完成");
+}
+
+/**
+ * 创建通用上传会话相关表（跨驱动前端分片/断点续传会话管理）
+ * @param {D1Database} db - D1数据库实例
+ */
+async function createUploadSessionsTables(db) {
+  console.log("创建上传会话相关表...");
+
+  // 通用上传会话表：管理各存储驱动的前端分片/断点续传会话（S3 / OneDrive / 其他）
+  await db
+    .prepare(
+      `
+      CREATE TABLE IF NOT EXISTS ${DbTables.UPLOAD_SESSIONS} (
+        id TEXT PRIMARY KEY,
+
+        -- 主体与目标信息
+        user_id TEXT NOT NULL,
+        user_type TEXT NOT NULL,
+        storage_type TEXT NOT NULL,
+        storage_config_id TEXT NOT NULL,
+        mount_id TEXT,
+        fs_path TEXT NOT NULL,
+        source TEXT NOT NULL,
+
+        -- 文件级元数据
+        file_name TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        mime_type TEXT,
+        checksum TEXT,
+
+        -- 文件指纹（用于跨驱动/跨会话识别同一逻辑文件）
+        fingerprint_algo TEXT,
+        fingerprint_value TEXT,
+
+        -- 策略与进度
+        strategy TEXT NOT NULL,
+        part_size INTEGER NOT NULL,
+        total_parts INTEGER NOT NULL,
+        bytes_uploaded INTEGER NOT NULL DEFAULT 0,
+        uploaded_parts INTEGER NOT NULL DEFAULT 0,
+        next_expected_range TEXT,
+
+        -- provider 会话信息（驱动私有）
+        provider_upload_id TEXT,
+        provider_upload_url TEXT,
+        provider_meta TEXT,
+
+        -- 会话状态与错误
+        status TEXT NOT NULL,
+        error_code TEXT,
+        error_message TEXT,
+
+        -- 生命周期
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME
+      )
+    `,
+    )
+    .run();
+
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_upload_sessions_user ON ${DbTables.UPLOAD_SESSIONS}(user_id, user_type)`,
+    )
+    .run();
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_upload_sessions_storage ON ${DbTables.UPLOAD_SESSIONS}(storage_type, storage_config_id)`,
+    )
+    .run();
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_upload_sessions_mount_path ON ${DbTables.UPLOAD_SESSIONS}(mount_id, fs_path)`,
+    )
+    .run();
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_upload_sessions_status ON ${DbTables.UPLOAD_SESSIONS}(status, updated_at DESC)`,
+    )
+    .run();
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_upload_sessions_source ON ${DbTables.UPLOAD_SESSIONS}(source)`,
+    )
+    .run();
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_upload_sessions_fingerprint ON ${DbTables.UPLOAD_SESSIONS}(fingerprint_value)`,
+    )
+    .run();
+
+  console.log("上传会话表创建完成");
+}
+
 // ==================== 索引创建 ====================
 
 /**
@@ -329,6 +558,11 @@ async function createSystemTables(db) {
  */
 async function createIndexes(db) {
   console.log("创建数据库索引...");
+
+  // scheduled_jobs 表索引（幂等）
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_next_run ON ${DbTables.SCHEDULED_JOBS}(enabled, next_run_after)`).run();
+  // scheduled_job_runs 表索引（幂等）
+  await db.prepare(`CREATE INDEX IF NOT EXISTS idx_scheduled_job_runs_task_started ON ${DbTables.SCHEDULED_JOB_RUNS}(task_id, started_at DESC)`).run();
 
   // pastes表索引
   await db.prepare(`CREATE INDEX IF NOT EXISTS idx_pastes_slug ON ${DbTables.PASTES}(slug)`).run();
@@ -365,6 +599,33 @@ async function createIndexes(db) {
  */
 async function initDefaultSettings(db) {
   console.log("初始化系统默认设置...");
+
+  // 为 cleanup_upload_sessions 任务写入默认调度配置（若不存在）
+  const cleanupIntervalSec = 24 * 60 * 60; // 每 24 小时运行一次（秒）
+  const firstCleanupNextRunIso = new Date(
+    Date.now() + cleanupIntervalSec * 1000,
+  ).toISOString();
+  await db
+    .prepare(
+      `
+      INSERT INTO ${DbTables.SCHEDULED_JOBS} (task_id, handler_id, name, description, enabled, schedule_type, interval_sec, next_run_after, config_json)
+      SELECT ?, ?, ?, ?, 1, 'interval', ?, ?, ?
+      WHERE NOT EXISTS (
+        SELECT 1 FROM ${DbTables.SCHEDULED_JOBS} WHERE task_id = ?
+      )
+    `,
+    )
+    .bind(
+      "cleanup_upload_sessions",
+      "cleanup_upload_sessions",
+      "清理分片上传会话（默认）",
+      "定期清理本地分片上传会话记录，保持活跃列表干净。",
+      cleanupIntervalSec,
+      firstCleanupNextRunIso,
+      JSON.stringify({ keepDays: 30, activeGraceHours: 24 }),
+      "cleanup_upload_sessions",
+    )
+    .run();
 
   const defaultSettings = [
     {
@@ -497,9 +758,13 @@ export async function initDatabase(db) {
   await createFileTables(db);
   await createFsMetaTables(db);
   await createSystemTables(db);
+  await createTasksTables(db);
+  await createScheduledJobsTables(db);
+  await createScheduledJobRunsTables(db);
+  await createUploadSessionsTables(db);
 
   // 创建索引
-  await createIndexes(db);
+  await createIndexes(db)
 
   // 初始化完整的默认设置
   await initDefaultSettings(db); // 基础设置 (4个)
@@ -808,6 +1073,28 @@ async function executeMigrationForVersion(db, version) {
       console.log("版本24：storage_configs.url_proxy 字段检查/创建完成。");
       break;
 
+    case 25:
+      // 版本25：创建通用 tasks 表用于跨运行时任务编排（Workers + Docker）
+      console.log("版本25：检查并创建 tasks 表...");
+      await createTasksTables(db);
+      console.log("版本25：tasks 表及索引创建完成。");
+      break;
+
+    case 26:
+      // 版本26：创建通用 upload_sessions 表用于跨驱动前端分片/断点续传会话管理
+      console.log("版本26：检查并创建 upload_sessions 表...");
+      await createUploadSessionsTables(db);
+      console.log("版本26：upload_sessions 表及索引检查/创建完成。");
+      break;
+
+    case 27:
+      // 版本27：创建 scheduled_jobs 表用于后台调度作业（初始版本）
+      console.log("版本27：检查并创建 scheduled_jobs，scheduled_job_runs 表...");
+      await createScheduledJobsTables(db);
+      await createScheduledJobRunsTables(db);
+      console.log("版本27：scheduled_jobs，scheduled_job_runs 表及索引检查/创建完成。");
+      break;
+    
     default:
       console.log(`未知的迁移版本: ${version}`);
       break;
@@ -1611,6 +1898,9 @@ export async function checkAndInitDatabase(db) {
       DbTables.FILE_PASSWORDS,
       DbTables.SYSTEM_SETTINGS,
       DbTables.STORAGE_MOUNTS,
+      DbTables.TASKS,
+      DbTables.SCHEDULED_JOBS,
+      DbTables.SCHEDULED_JOB_RUNS,
     ];
 
     for (const tableName of requiredTables) {
@@ -1631,7 +1921,7 @@ export async function checkAndInitDatabase(db) {
     const versionSetting = await db.prepare(`SELECT value FROM ${DbTables.SYSTEM_SETTINGS} WHERE key = 'schema_version'`).first();
 
     const currentVersion = versionSetting ? parseInt(versionSetting.value) : 0;
-    const targetVersion = 24; // 当前最新版本
+    const targetVersion = 27; // 当前最新版本
 
     if (currentVersion < targetVersion) {
       console.log(`需要更新数据库结构，当前版本:${currentVersion}，目标版本:${targetVersion}`);

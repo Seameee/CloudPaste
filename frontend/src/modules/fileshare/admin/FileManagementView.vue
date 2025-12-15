@@ -95,11 +95,6 @@
       </div>
     </div>
 
-    <!-- 错误消息提示 -->
-    <div v-if="error" class="mb-4 p-3 bg-red-100 text-red-600 rounded">
-      <p>{{ error }}</p>
-    </div>
-
     <!-- 上次刷新时间显示 -->
     <div class="flex justify-between items-center mb-2 sm:mb-3" v-if="lastRefreshTime">
       <div class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
@@ -128,8 +123,6 @@
           :dark-mode="darkMode"
           :selected-files="selectedFiles"
           :user-type="props.userType"
-          :copied-files="copiedFiles"
-          :copied-permanent-files="copiedPermanentFiles"
           :loading="loading || searchLoading"
           @toggle-select="toggleSelectItem"
           @toggle-select-all="toggleSelectAll"
@@ -139,6 +132,7 @@
           @generate-qr="(file) => generateQRCode(file, darkMode)"
           @copy-link="copyFileLink"
           @copy-permanent-link="copyPermanentLink"
+          @error="showError"
         />
       </div>
     </div>
@@ -172,13 +166,22 @@
 
     <!-- 二维码弹窗 -->
     <QRCodeModal v-if="showQRCodeModal" :qr-code-url="qrCodeDataURL" :file-slug="qrCodeSlug" :dark-mode="darkMode" @close="showQRCodeModal = false" />
+
+    <!-- 确认对话框 -->
+    <ConfirmDialog
+      v-bind="dialogState"
+      @confirm="handleConfirm"
+      @cancel="handleCancel"
+    />
   </div>
 </template>
 
 <script setup>
 import { onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useFileManagement } from "@/modules/fileshare/admin/useFileManagement.js";
 import { useThemeMode } from "@/composables/core/useThemeMode.js";
+import { useConfirmDialog } from "@/composables/core/useConfirmDialog.js";
 
 // 导入子组件
 import FileTable from "@/modules/fileshare/admin/components/FileTable.vue";
@@ -187,6 +190,7 @@ import FileEditModal from "@/components/file/FileEditModal.vue";
 import FilePreviewModal from "@/modules/fileshare/admin/components/FilePreviewModal.vue";
 import QRCodeModal from "@/modules/fileshare/admin/components/QRCodeModal.vue";
 import GlobalSearchBox from "@/components/common/GlobalSearchBox.vue";
+import ConfirmDialog from "@/components/common/dialogs/ConfirmDialog.vue";
 
 /**
  * 组件接收的属性定义
@@ -205,11 +209,27 @@ const props = defineProps({
  */
 const { isDarkMode: darkMode } = useThemeMode();
 
+// 国际化
+const { t } = useI18n();
+
+// 确认对话框
+const { dialogState, confirm, handleConfirm, handleCancel } = useConfirmDialog();
+
+// 创建适配确认函数，用于传递给 composable
+const confirmFn = async ({ title, message, confirmType }) => {
+  return await confirm({
+    title,
+    message,
+    confirmType,
+    confirmText: t("common.dialogs.deleteButton"),
+    darkMode: darkMode.value,
+  });
+};
+
 // 使用文件管理composable
 const {
   // 状态
   loading,
-  error,
   selectedItems: selectedFiles,
   lastRefreshTime,
   pagination,
@@ -222,8 +242,6 @@ const {
   showQRCodeModal,
   qrCodeDataURL,
   qrCodeSlug,
-  copiedFiles,
-  copiedPermanentFiles,
 
   // 方法
   loadFiles,
@@ -238,6 +256,7 @@ const {
   generateQRCode,
   copyFileLink,
   copyPermanentLink,
+  showError,
   getFilePassword,
   getOfficePreviewUrl,
   previewFileInNewWindow,
@@ -247,7 +266,7 @@ const {
   toggleSelectItem,
   toggleSelectAll,
   clearSelection,
-} = useFileManagement(props.userType);
+} = useFileManagement(props.userType, { confirmFn });
 
 // 需要在模板中使用的删除设置store
 import { useDeleteSettingsStore } from "@/stores/deleteSettingsStore.js";
