@@ -2,6 +2,9 @@ import { defineConfig, loadEnv } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { VitePWA } from "vite-plugin-pwa";
 import { fileURLToPath, URL } from "node:url";
+import Icons from "unplugin-icons/vite";
+import Components from "unplugin-vue-components/vite";
+import IconsResolver from "unplugin-icons/resolver";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -9,7 +12,7 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
   // 统一版本管理
-  const APP_VERSION = "1.4.0";
+  const APP_VERSION = "1.5.0";
   const isDev = command === "serve";
 
   // 打印环境变量，帮助调试
@@ -24,14 +27,24 @@ export default defineConfig(({ command, mode }) => {
   return {
     base: '/',
     define: {
-      // 注入版本号到应用中
       __APP_VERSION__: JSON.stringify(APP_VERSION),
-      // 注入环境变量到应用中
       __APP_ENV__: JSON.stringify(env.VITE_APP_ENV || "production"),
       __BACKEND_URL__: JSON.stringify(env.VITE_BACKEND_URL || ""),
     },
     plugins: [
       vue(),
+      Components({
+        dts: false,
+        resolvers: [
+          IconsResolver({
+            prefix: "i",
+            enabledCollections: ["mdi", "heroicons-outline", "heroicons-solid"],
+          }),
+        ],
+      }),
+      Icons({
+        compiler: "vue3",
+      }),
       VitePWA({
         registerType: "autoUpdate",
         injectRegister: "auto", //自动注入更新检测代码
@@ -60,7 +73,7 @@ export default defineConfig(({ command, mode }) => {
                 cacheName: "app-static-resources",
                 expiration: {
                   maxEntries: 1000,
-                  maxAgeSeconds: 7 * 24 * 60 * 60, // 7天（依赖Vite版本控制）
+                  maxAgeSeconds: 7 * 24 * 60 * 60,
                 },
                 cacheableResponse: {
                   statuses: [0, 200],
@@ -76,7 +89,7 @@ export default defineConfig(({ command, mode }) => {
                 cacheName: "fonts",
                 expiration: {
                   maxEntries: 50,
-                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30天（字体变化频率低）
+                  maxAgeSeconds: 30 * 24 * 60 * 60, 
                 },
                 cacheableResponse: {
                   statuses: [0, 200],
@@ -101,7 +114,7 @@ export default defineConfig(({ command, mode }) => {
                 cacheName: "external-cdn-resources",
                 expiration: {
                   maxEntries: 100,
-                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30天
+                  maxAgeSeconds: 30 * 24 * 60 * 60, 
                 },
                 cacheableResponse: {
                   statuses: [0, 200],
@@ -120,7 +133,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 图廊图片 - StaleWhileRevalidate（图片适合后台更新）
+            // 图廊图片 - StaleWhileRevalidate
             {
               urlPattern: ({ request, url }) =>
                 request.destination === "image" && (url.pathname.includes("/api/") || url.searchParams.has("X-Amz-Algorithm") || url.hostname !== self.location.hostname),
@@ -200,7 +213,7 @@ export default defineConfig(({ command, mode }) => {
                 cacheName: "system-api",
                 expiration: {
                   maxEntries: 10,
-                  maxAgeSeconds: 30 * 60, // 30分钟
+                  maxAgeSeconds: 30 * 60,
                 },
                 networkTimeoutSeconds: 3,
                 cacheableResponse: {
@@ -227,7 +240,7 @@ export default defineConfig(({ command, mode }) => {
               },
             },
 
-            // 文本分享API - NetworkOnly（涉及访问计数，必须实时）
+            // 文本分享API - NetworkOnly
             {
               urlPattern: /^.*\/api\/(pastes|paste|raw)\/.*$/,
               handler: "NetworkOnly",
@@ -262,7 +275,7 @@ export default defineConfig(({ command, mode }) => {
                 cacheName: "public-api",
                 expiration: {
                   maxEntries: 50,
-                  maxAgeSeconds: 60 * 60, // 1小时（公共内容相对稳定）
+                  maxAgeSeconds: 60 * 60,
                 },
                 cacheableResponse: {
                   statuses: [0, 200],
@@ -406,8 +419,7 @@ export default defineConfig(({ command, mode }) => {
       },
     },
     optimizeDeps: {
-      include: ["vue-i18n", "chart.js", "qrcode", "mime-db"],
-      // 移除vditor排除配置，因为现在从本地dist目录加载
+      include: ["vue-i18n", "chart.js", "qrcode", "mime-db", "docx-preview"],
     },
     build: {
       outDir: 'dist', // 显式指定输出目录
@@ -424,7 +436,8 @@ export default defineConfig(({ command, mode }) => {
             // 将大型库分离到单独的 chunk
             "vendor-vue": ["vue", "vue-router", "vue-i18n"],
             "vendor-charts": ["chart.js", "vue-chartjs"],
-            "vendor-utils": ["qrcode", "file-saver", "docx", "html-to-image"],
+            "vendor-utils": ["qrcode", "file-saver", "docx", "@zumer/snapdom"],
+            "office-viewer": ["docx-preview", "@vue-office/excel", "@vue-office/pptx"],
           },
         },
       },

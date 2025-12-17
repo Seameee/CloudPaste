@@ -6,78 +6,23 @@
     :style="{ top: `${position.y}px`, left: `${position.x}px`, display: 'block' }"
   >
     <div class="px-4 py-2 cursor-pointer flex items-center" @click="copyAsMarkdown">
-      <svg class="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M14 3v4a1 1 0 0 0 1 1h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <path
-          d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-        <path d="M9 9h1v6h1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M15 15h-2v-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
+      <IconDocumentText size="sm" class="mr-2" />
       <span>{{ $t("markdown.copyAsMarkdown") }}</span>
     </div>
     <div class="px-4 py-2 cursor-pointer flex items-center" @click="copyAsHTML">
-      <svg class="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path
-          d="M9 16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-4l-4 4z"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-        <path d="M8 9l3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M16 15l-3-3 3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
+      <IconCode size="sm" class="mr-2" />
       <span>{{ $t("markdown.copyAsHTML") }}</span>
     </div>
     <div class="px-4 py-2 cursor-pointer flex items-center" @click="copyAsPlainText">
-      <svg class="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M14 3v4a1 1 0 0 0 1 1h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <path
-          d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-        <path d="M9 9h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M9 13h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M9 17h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
+      <IconDocumentText size="sm" class="mr-2" />
       <span>{{ $t("markdown.copyAsPlainText") }}</span>
     </div>
     <div class="px-4 py-2 cursor-pointer flex items-center" @click="exportWordDocument">
-      <svg class="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path
-          d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-        <path d="M14 2v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
+      <IconDownload size="sm" class="mr-2" />
       <span>{{ $t("markdown.exportAsWord") }}</span>
     </div>
     <div class="px-4 py-2 cursor-pointer flex items-center" @click="exportAsPng">
-      <svg class="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path
-          d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-        <path d="M17 21v-8h-8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M7 3v5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
+      <IconDownload size="sm" class="mr-2" />
       <span>{{ $t("markdown.exportAsPng") }}</span>
     </div>
   </div>
@@ -86,10 +31,12 @@
 <script setup>
 import { onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
+import { IconCode, IconDocumentText, IconDownload } from "@/components/icons";
 import { copyToClipboard as clipboardCopy } from "@/utils/clipboard";
 import markdownToWord from "@/utils/markdownToWord";
+import { formatNowForFilename } from "@/utils/timeUtils.js";
 import { saveAs } from "file-saver";
-import htmlToImage from "@/utils/htmlToImage";
+import { editorContentToPng as snapdomEditorContentToPng } from "@/utils/snapdomCapture";
 
 const { t } = useI18n();
 
@@ -255,87 +202,17 @@ const exportAsPng = async () => {
     const baseName = props.documentTitle || "markdown";
     const fileName = `${baseName}-${timestamp}.png`;
 
-    const editorContainer = document.getElementById("vditor");
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const result = await htmlToImage.editorContentToPng(props.editor, {
+    const result = await snapdomEditorContentToPng(props.editor, {
       filename: fileName,
-      imageOptions: {
-        quality: 1.0,
+      autoUseProxy: true,
+      snapdomOptions: {
         backgroundColor: props.darkMode ? "#1e1e1e" : "#ffffff",
-        style: {
-          "max-width": "100%",
-          width: "auto",
-        },
-        cacheBust: true,
-        imagePlaceholder:
-          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
-        skipFonts: false,
-        pixelRatio: 4,
-        canvasWidth: editorContainer ? editorContainer.offsetWidth : undefined,
-        canvasHeight: undefined,
-      },
-      beforeCapture: async (targetElement) => {
-        const tempStyle = document.createElement("style");
-        tempStyle.id = "temp-export-style";
-        tempStyle.textContent = `
-          .vditor-reset {
-            padding: 20px !important;
-            box-sizing: border-box !important;
-          }
-          .vditor-reset pre {
-            white-space: pre-wrap !important;
-            word-break: break-all !important;
-            overflow: visible !important;
-            background-color: #f6f8fa !important;
-            border-radius: 4px !important;
-            padding: 12px 16px !important;
-            margin: 1em 0 !important;
-          }
-          .vditor-reset pre code {
-            font-family: monospace, Consolas, "Courier New", monospace !important;
-            font-size: 13px !important;
-            line-height: 1.5 !important;
-            white-space: pre-wrap !important;
-            tab-size: 4 !important;
-            word-break: keep-all !important;
-          }
-          .vditor-reset img {
-            max-width: 100% !important;
-            image-rendering: auto !important;
-          }
-          .vditor-reset table {
-            display: table !important;
-            width: auto !important;
-            max-width: 100% !important;
-            overflow: visible !important;
-            border-collapse: collapse !important;
-            margin: 1em 0 !important;
-          }
-          .vditor-reset table th,
-          .vditor-reset table td {
-            border: 1px solid #ddd !important;
-            padding: 8px 12px !important;
-          }
-        `;
-        document.head.appendChild(tempStyle);
-
-        const images = targetElement.querySelectorAll("img");
-        images.forEach((img) => {
-          if (!img.hasAttribute("crossorigin")) {
-            img.setAttribute("crossorigin", "anonymous");
-          }
-        });
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        return Promise.resolve();
-      },
-      afterCapture: (targetElement) => {
-        const tempStyle = document.getElementById("temp-export-style");
-        if (tempStyle) {
-          document.head.removeChild(tempStyle);
-        }
-        return Promise.resolve();
+        cache: "auto",
+        embedFonts: true,
+        placeholders: true,
+        outerTransforms: true,
       },
       onSuccess: (dataUrl, blob) => {
         emit("status-message", t("markdown.messages.pngExported"));
@@ -361,6 +238,13 @@ const exportAsPng = async () => {
           : t("markdown.messages.pngExportFailed");
 
       throw result?.error || new Error(errorMsg);
+    }
+
+    if (Array.isArray(result.warnings) && result.warnings.length > 0) {
+      const proxyWarn = result.warnings.find((w) => w && w.code === "proxy_unavailable");
+      if (proxyWarn) {
+        emit("status-message", proxyWarn.message);
+      }
     }
   } catch (error) {
     console.error("导出PNG图片过程中发生错误:", error);

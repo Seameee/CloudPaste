@@ -17,9 +17,7 @@
           :title="$t('search.title')"
         >
           <!-- 搜索图标 -->
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+          <IconSearch size="sm" class="w-4 h-4" aria-hidden="true" />
 
           <!-- 搜索文字（在小屏幕上隐藏） -->
           <span class="hidden sm:inline text-sm text-gray-500" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
@@ -46,10 +44,7 @@
           "
           :title="$t('mount.settings.title')"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
+          <IconSettings size="sm" class="w-4 h-4" aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -66,11 +61,11 @@
 
     <!-- 主要内容区域 -->
     <div v-if="hasPermission" class="mount-explorer-main">
-      <!-- 顶部 README -->
-      <DirectoryReadme position="top" :meta="directoryMeta" :dark-mode="darkMode" />
+      <!-- 顶部 README（仅目录视图显示） -->
+      <DirectoryReadme v-if="!showFilePreview" position="top" :meta="directoryMeta" :dark-mode="darkMode" />
 
       <!-- 操作按钮 -->
-      <div class="card mb-4">
+      <div v-if="!showFilePreview" class="card mb-4">
         <div class="p-3">
           <FileOperations
             :current-path="currentPath"
@@ -199,9 +194,10 @@
       <!-- 面包屑导航 -->
       <div class="mb-4">
           <BreadcrumbNav
-          :current-path="currentPath"
+          :current-path="currentViewPath"
           :dark-mode="darkMode"
           @navigate="handleNavigate"
+          @prefetch="handlePrefetch"
           :basic-path="apiKeyInfo?.basic_path || '/'"
           :user-type="isAdmin ? 'admin' : 'user'"
         />
@@ -224,48 +220,64 @@
             @error="handlePasswordError"
           />
 
-          <!-- 错误提示 -->
-          <div v-else-if="error" class="mb-4 p-4 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg">
-            <div class="flex items-center">
-              <svg class="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fill-rule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clip-rule="evenodd"
-                ></path>
-              </svg>
-              <span class="text-red-700 dark:text-red-200">{{ error }}</span>
+          <template v-else>
+            <!-- 非阻塞错误提示：不再用 error 直接替换整个列表区域 -->
+            <div v-if="error" class="mb-4 p-4 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex items-start">
+                  <IconXCircle size="md" class="w-5 h-5 text-red-500 mr-2 mt-0.5 shrink-0" aria-hidden="true" />
+                  <div>
+                    <div class="text-red-700 dark:text-red-200 font-medium">{{ $t("common.error") }}</div>
+                    <div class="text-red-700/90 dark:text-red-200/90 text-sm mt-0.5">{{ error }}</div>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      <button
+                        class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                        :class="darkMode ? 'bg-red-800/40 hover:bg-red-800/60 text-red-100' : 'bg-red-200 hover:bg-red-300 text-red-900'"
+                        @click="handleRetryDirectory"
+                      >
+                        {{ $t("common.retry") }}
+                      </button>
+                      <button
+                        class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                        :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-100' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'"
+                        @click="dismissDirectoryError"
+                      >
+                        {{ $t("common.close") }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <!-- 目录列表 - 保持挂载状态 -->
-          <DirectoryList
-            ref="directoryListRef"
-            v-else
-            :current-path="currentPath"
-            :items="visibleItems"
-            :loading="loading"
-            :is-virtual="isVirtualDirectory"
-            :dark-mode="darkMode"
-            :view-mode="viewMode"
-            :show-checkboxes="explorerSettings.settings.showCheckboxes"
-            :selected-items="getSelectedItems()"
-            :context-highlight-path="contextHighlightPath"
-            :animations-enabled="explorerSettings.settings.animationsEnabled"
-            :file-name-overflow="explorerSettings.settings.fileNameOverflow"
-            :show-action-buttons="explorerSettings.settings.showActionButtons"
-            :rename-loading="isDirectoryListRenaming"
-            @navigate="handleNavigate"
-            @download="handleDownload"
-            @getLink="handleGetLink"
-            @rename="handleRename"
-            @delete="handleDelete"
-            @preview="handlePreview"
-            @item-select="handleItemSelect"
-            @toggle-select-all="toggleSelectAll"
-            @show-message="handleShowMessage"
-            @contextmenu="handleFileContextMenu"
-          />
+            <!-- 目录列表 - 保持挂载状态 -->
+            <DirectoryList
+              ref="directoryListRef"
+              :current-path="currentPath"
+              :items="visibleItems"
+              :loading="loading"
+              :is-virtual="isVirtualDirectory"
+              :dark-mode="darkMode"
+              :view-mode="viewMode"
+              :show-checkboxes="explorerSettings.settings.showCheckboxes"
+              :selected-items="getSelectedItems()"
+              :context-highlight-path="contextHighlightPath"
+              :animations-enabled="explorerSettings.settings.animationsEnabled"
+              :file-name-overflow="explorerSettings.settings.fileNameOverflow"
+              :show-action-buttons="explorerSettings.settings.showActionButtons"
+              :rename-loading="isDirectoryListRenaming"
+              @navigate="handleNavigate"
+              @download="handleDownload"
+              @getLink="handleGetLink"
+              @rename="handleRename"
+              @delete="handleDelete"
+              @preview="handlePreview"
+              @item-select="handleItemSelect"
+              @toggle-select-all="toggleSelectAll"
+              @show-message="handleShowMessage"
+              @contextmenu="handleFileContextMenu"
+            />
+          </template>
         </div>
 
         <!-- 文件预览模式 -->
@@ -281,14 +293,7 @@
           <!-- 预览错误状态 -->
           <div v-else-if="previewError" class="p-8 text-center">
             <div class="flex flex-col items-center space-y-4">
-              <svg class="w-12 h-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.694-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"
-                ></path>
-              </svg>
+              <IconExclamation size="3xl" class="w-12 h-12 text-red-500" aria-hidden="true" />
               <div class="text-red-600 dark:text-red-400">
                 {{ previewError }}
               </div>
@@ -307,9 +312,7 @@
                 class="inline-flex items-center px-3 py-1.5 rounded-md transition-colors text-sm font-medium"
                 :class="darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'"
               >
-                <svg class="w-4 h-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
+                <IconBack size="sm" class="w-4 h-4 mr-1.5" aria-hidden="true" />
                 <span>{{ t("mount.backToFileList") }}</span>
               </button>
             </div>
@@ -353,6 +356,9 @@
       @close="handleCloseSettingsDrawer"
     />
 
+    <!-- FS 媒体查看器（Lightbox Shell） -->
+    <FsMediaLightboxDialog />
+
     <!-- 悬浮操作栏 (当有选中项时显示) -->
     <FloatingActionBar
       v-if="hasPermission && selectedCount > 0"
@@ -389,10 +395,10 @@
 
 <script setup>
 import { ref, computed, provide, onMounted, onBeforeUnmount, watch } from "vue";
-import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { storeToRefs } from "pinia";
 import { useThemeMode } from "@/composables/core/useThemeMode.js";
+import { IconBack, IconExclamation, IconSearch, IconSettings, IconXCircle } from "@/components/icons";
 
 // 组合式函数 - 使用统一聚合导出
 import { useSelection, useFileOperations, useUIState, useFileBasket } from "@/composables/index.js";
@@ -416,6 +422,7 @@ import PathPasswordDialog from "@/modules/fs/components/shared/modals/PathPasswo
 import ConfirmDialog from "@/components/common/dialogs/ConfirmDialog.vue";
 import InputDialog from "@/components/common/dialogs/InputDialog.vue";
 import FileBasketPanel from "@/modules/fs/components/shared/FileBasketPanel.vue";
+import FsMediaLightboxDialog from "@/modules/fs/components/lightbox/FsMediaLightboxDialog.vue";
 import PermissionManager from "@/components/common/PermissionManager.vue";
 import SettingsDrawer from "@/modules/fs/components/shared/SettingsDrawer.vue";
 import FloatingActionBar from "@/modules/fs/components/shared/FloatingActionBar.vue";
@@ -424,9 +431,6 @@ import BackToTop from "@/modules/fs/components/shared/BackToTop.vue";
 import { useExplorerSettings } from "@/composables/useExplorerSettings";
 
 const { t } = useI18n();
-
-// Vue Router
-const router = useRouter();
 
 // 使用组合式函数
 const selection = useSelection();
@@ -444,6 +448,7 @@ const { isBasketOpen } = storeToRefs(fileBasket);
 // 控制器：封装路由 / 权限 / 目录加载与预览初始化
 const {
   currentPath,
+  currentViewPath,
   loading,
   error,
   hasPermissionForCurrentPath,
@@ -464,9 +469,14 @@ const {
   showFilePreview,
   updateUrl,
   navigateTo,
-  updatePreviewUrl,
+  navigateToPreserveHistory,
+  navigateToFile,
   stopPreview,
   refreshDirectory,
+  refreshCurrentRoute,
+  prefetchDirectory,
+  invalidateCaches,
+  removeItemsFromCurrentDirectory,
 } = useMountExplorerController();
 
 // 根据目录 Meta 的隐藏规则计算实际可见条目
@@ -689,38 +699,10 @@ const handleSearchItemClick = async (item) => {
   try {
     console.log("搜索结果项点击:", item);
 
-    // 如果是文件，导航到文件所在目录并预览文件
     if (!item.isDirectory) {
-      const directoryPath = item.path.substring(0, item.path.lastIndexOf("/")) || "/";
-      const fileName = item.name;
-
-      console.log("文件导航:", { directoryPath, fileName });
-
-      // 构建正确的路由路径
-      let routePath = "/mount-explorer";
-      if (directoryPath !== "/") {
-        // 移除开头的斜杠，因为路由已经包含了
-        const normalizedPath = directoryPath.replace(/^\/+/, "");
-        routePath = `/mount-explorer/${normalizedPath}`;
-      }
-
-      // 导航到目录，并在URL中添加预览参数
-      await router.push({
-        path: routePath,
-        query: { preview: fileName },
-      });
+      await navigateToFile(item.path);
     } else {
-      // 如果是目录，直接导航到该目录
-      console.log("目录导航:", item.path);
-
-      let routePath = "/mount-explorer";
-      if (item.path !== "/") {
-        // 移除开头的斜杠，因为路由已经包含了
-        const normalizedPath = item.path.replace(/^\/+/, "");
-        routePath = `/mount-explorer/${normalizedPath}`;
-      }
-
-      await router.push(routePath);
+      await navigateTo(item.path);
     }
 
     // 关闭搜索模态框
@@ -736,14 +718,34 @@ const handleSearchItemClick = async (item) => {
 /**
  * 处理导航
  */
-const handleNavigate = async (path, previewFileName = null) => {
-  if (previewFileName) {
-    // 如果有预览文件，使用updateUrl
-    updateUrl(path, previewFileName);
-  } else {
-    // 否则使用navigateTo
-    await navigateTo(path);
+const handleNavigate = async (path) => {
+  const normalizeFsPath = (p) => {
+    const raw = typeof p === "string" && p ? p : "/";
+    const withLeading = raw.startsWith("/") ? raw : `/${raw}`;
+    const collapsed = withLeading.replace(/\/{2,}/g, "/");
+    if (collapsed === "/") return "/";
+    return collapsed.replace(/\/+$/, "");
+  };
+
+  const isAncestorOrSame = (maybeAncestor, current) => {
+    const ancestor = normalizeFsPath(maybeAncestor);
+    const cur = normalizeFsPath(current);
+    if (ancestor === "/") return true;
+    return cur === ancestor || cur.startsWith(`${ancestor}/`);
+  };
+
+  // 面包屑/返回上级属于“回退导航”：
+  // - 优先保留目标目录的 history 快照
+  if (isAncestorOrSame(path, currentViewPath.value)) {
+    await navigateToPreserveHistory(path);
+    return;
   }
+
+  await navigateTo(path);
+};
+
+const handlePrefetch = (path) => {
+  prefetchDirectory(path);
 };
 
 /**
@@ -781,6 +783,7 @@ const handleCreateFolderConfirm = async (folderName) => {
 
     if (result.success) {
       showMessage("success", result.message);
+      invalidateCaches();
       // 重新加载当前目录内容
       await refreshDirectory();
       showCreateFolderDialog.value = false;
@@ -817,14 +820,14 @@ const handleContextMenuRenameConfirm = async (newName) => {
 
   try {
     const item = contextMenuRenameItem.value;
-    // 构建新路径
-    const parentPath = item.path.substring(0, item.path.lastIndexOf("/") + 1);
     const isDirectory = item.isDirectory;
     const oldPath = item.path;
+    const basePath = isDirectory && oldPath.endsWith("/") ? oldPath.slice(0, -1) : oldPath;
+    const parentPath = basePath.substring(0, basePath.lastIndexOf("/") + 1);
     let newPath = parentPath + newName.trim();
 
-    // 如果是目录，确保新路径末尾有斜杠
-    if (isDirectory && !newPath.endsWith("/")) {
+    // 目录在后端契约中仍以 `/` 结尾
+    if (isDirectory) {
       newPath += "/";
     }
 
@@ -833,6 +836,7 @@ const handleContextMenuRenameConfirm = async (newName) => {
 
     if (result.success) {
       showMessage("success", result.message);
+      invalidateCaches();
       // 重新加载当前目录内容
       await refreshDirectory();
       // 关闭对话框并清理状态
@@ -900,11 +904,11 @@ const handleGetLink = async (item) => {
 const handlePreview = async (item) => {
   if (!item || item.isDirectory) return;
 
-  // 只更新URL，让路由监听器处理实际的文件加载
-  updatePreviewUrl(currentPath.value, item.name);
+  // 直接导航到文件路径（pathname 表示对象）
+  await navigateToFile(item.path);
 
   // 滚动到顶部
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0 });
 };
 
 /**
@@ -926,13 +930,14 @@ const handleRename = async ({ item, newName }) => {
 
   try {
     // 构建新路径
-    const parentPath = item.path.substring(0, item.path.lastIndexOf("/") + 1);
     const isDirectory = item.isDirectory;
     const oldPath = item.path;
+    const basePath = isDirectory && oldPath.endsWith("/") ? oldPath.slice(0, -1) : oldPath;
+    const parentPath = basePath.substring(0, basePath.lastIndexOf("/") + 1);
     let newPath = parentPath + newName.trim();
 
-    // 如果是目录，确保新路径末尾有斜杠
-    if (isDirectory && !newPath.endsWith("/")) {
+    // 目录在后端契约中仍以 `/` 结尾
+    if (isDirectory) {
       newPath += "/";
     }
 
@@ -941,6 +946,7 @@ const handleRename = async ({ item, newName }) => {
 
     if (result.success) {
       showMessage("success", result.message);
+      invalidateCaches();
       // 重新加载当前目录内容
       await refreshDirectory();
     } else {
@@ -1005,6 +1011,11 @@ const confirmDelete = async () => {
     if (result.success) {
       showMessage("success", result.message);
 
+      // 删除属于写操作：清空前端缓存（秒开快照 + 可验证缓存），强制下一次导航以服务端为准
+      invalidateCaches();
+      // 立即从当前目录移除（减少等待与闪烁）
+      removeItemsFromCurrentDirectory(itemsToDelete.value.map((item) => item?.path).filter(Boolean));
+
       // 如果是批量删除，清空选择状态
       if (itemsToDelete.value.length > 1) {
         clearSelection();
@@ -1058,6 +1069,7 @@ const handleCloseUploadModal = () => {
 
 const handleUploadSuccess = async () => {
   showMessage("success", t("mount.messages.uploadSuccess"));
+  invalidateCaches();
   await refreshDirectory();
 };
 
@@ -1108,6 +1120,7 @@ const handleTaskCompleted = async (event) => {
   // 延迟一小段时间再刷新，确保后端数据已同步
   setTimeout(async () => {
     try {
+      invalidateCaches();
       await refreshDirectory();
       showMessage('success', t('mount.taskManager.taskCompletedRefresh'));
     } catch (error) {
@@ -1237,8 +1250,8 @@ const handlePasswordVerified = ({ path, token, message }) => {
   pathPassword.closePasswordDialog();
   pathPassword.clearPendingPath();
 
-  // 重新加载目录
-  refreshDirectory();
+  // 重新加载当前路由（可能是目录，也可能是文件深链）
+  refreshCurrentRoute();
 };
 
 const handlePasswordCancel = async () => {
@@ -1288,13 +1301,18 @@ const handlePreviewError = (error) => {
   showMessage("error", t("mount.messages.previewError"));
 };
 
-const closePreview = () => {
-  stopPreview(false);
+const closePreviewWithUrl = async () => {
+  await navigateToPreserveHistory(currentPath.value);
 };
 
-const closePreviewWithUrl = () => {
-  closePreview();
-  updateUrl(currentPath.value);
+const handleRetryDirectory = async () => {
+  // 清掉当前错误
+  error.value = null;
+  await refreshDirectory();
+};
+
+const dismissDirectoryError = () => {
+  error.value = null;
 };
 
 // 预览相关事件处理已在上面定义
@@ -1386,7 +1404,7 @@ onBeforeUnmount(() => {
   explorerSettings.cleanupDarkModeObserver();
 
   // 停止预览
-  stopPreview(false);
+  stopPreview();
 
   // 清理选择状态
   clearSelection();

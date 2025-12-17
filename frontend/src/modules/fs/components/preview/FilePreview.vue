@@ -14,9 +14,7 @@
             class="inline-flex items-center px-3 py-1.5 rounded-md transition-colors text-sm font-medium"
             :class="darkMode ? 'bg-primary-600 hover:bg-primary-700 text-white' : 'bg-primary-500 hover:bg-primary-600 text-white'"
           >
-            <svg class="w-4 h-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
+            <IconDownload size="sm" class="mr-1.5" aria-hidden="true" />
             <span>{{ t("mount.filePreview.downloadFile") }}</span>
           </button>
 
@@ -27,23 +25,8 @@
             :class="darkMode ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-green-500 hover:bg-green-600 text-white'"
             :disabled="isGeneratingPreview"
           >
-            <svg v-if="!isGeneratingPreview" class="w-4 h-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-              />
-            </svg>
-            <svg v-else class="animate-spin w-4 h-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
+            <IconEye v-if="!isGeneratingPreview" size="sm" class="mr-1.5" aria-hidden="true" />
+            <div v-else class="animate-spin rounded-full w-4 h-4 mr-1.5 border-b-2 border-current"></div>
             <span>{{ isGeneratingPreview ? t("mount.filePreview.generating") : t("mount.filePreview.directPreview") }}</span>
           </button>
 
@@ -54,22 +37,8 @@
             :class="darkMode ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'"
             :disabled="isCreatingShare"
           >
-            <svg v-if="!isCreatingShare" class="w-4 h-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
-              />
-            </svg>
-            <svg v-else class="animate-spin w-4 h-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
+            <IconLink v-if="!isCreatingShare" size="sm" class="mr-1.5" aria-hidden="true" />
+            <div v-else class="animate-spin rounded-full w-4 h-4 mr-1.5 border-b-2 border-current"></div>
             <span>{{ isCreatingShare ? t("mount.filePreview.creatingShare") : t("mount.filePreview.createShare") }}</span>
           </button>
         </div>
@@ -126,14 +95,12 @@
           <div class="toolbar-right flex flex-wrap items-center gap-2">
             <!-- 右键菜单提示图标 -->
             <div
-              v-if="textPreviewMode === 'edit'"
-              class="context-menu-hint flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 cursor-help hover:scale-110"
-              :class="darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-100/50'"
-              :title="$t('mount.filePreview.rightClickHint')"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="#f59e0b">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-              </svg>
+            v-if="textPreviewMode === 'edit'"
+            class="context-menu-hint flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 cursor-help hover:scale-110"
+            :class="darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-100/50'"
+            :title="$t('mount.filePreview.rightClickHint')"
+          >
+              <IconError class="text-yellow-500" aria-hidden="true" />
             </div>
 
             <!-- 保存按钮 - 仅在编辑模式下显示 -->
@@ -149,49 +116,21 @@
               :title="$t('mount.filePreview.saveFileShortcut')"
             >
               <!-- Loading图标 -->
-              <svg v-if="isSaving" class="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
+              <div v-if="isSaving" class="w-4 h-4 mr-1 animate-spin rounded-full border-b-2 border-current"></div>
               <!-- 保存图标 -->
-              <svg v-else class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12"
-                />
-              </svg>
+              <IconSave v-else size="sm" class="mr-1" aria-hidden="true" />
               {{ isSaving ? $t("mount.filePreview.saving") : $t("mount.filePreview.save") }}
             </button>
 
             <!-- 全屏按钮 -->
             <button
               @click="toggleFullscreen"
-              class="fullscreen-btn flex items-center px-3 py-1 text-sm border rounded transition-colors"
-              :class="darkMode ? 'bg-gray-600 hover:bg-gray-700 border-gray-500 text-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300 text-gray-700'"
-              :title="isContentFullscreen ? $t('mount.filePreview.exitFullscreen') : $t('mount.filePreview.fullscreen')"
-            >
-              <svg v-if="!isContentFullscreen" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                />
-              </svg>
-              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 9V4.5M9 9H4.5M9 9L3.5 3.5M15 9h4.5M15 9V4.5M15 9l5.5-5.5M9 15v4.5M9 15H4.5M9 15l-5.5 5.5M15 15h4.5M15 15v4.5m0 0l5.5 5.5"
-                />
-              </svg>
+            class="fullscreen-btn flex items-center px-3 py-1 text-sm border rounded transition-colors"
+            :class="darkMode ? 'bg-gray-600 hover:bg-gray-700 border-gray-500 text-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300 text-gray-700'"
+            :title="isContentFullscreen ? $t('mount.filePreview.exitFullscreen') : $t('mount.filePreview.fullscreen')"
+          >
+              <IconExpand v-if="!isContentFullscreen" size="sm" aria-hidden="true" />
+              <IconCollapse v-else size="sm" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -223,22 +162,8 @@
               :class="darkMode ? 'bg-gray-600 hover:bg-gray-700 border-gray-500 text-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300 text-gray-700'"
               :title="isContentFullscreen ? $t('mount.filePreview.exitFullscreen') : $t('mount.filePreview.fullscreen')"
             >
-              <svg v-if="!isContentFullscreen" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                />
-              </svg>
-              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 9V4.5M9 9H4.5M9 9L3.5 3.5M15 9h4.5M15 9V4.5M15 9l5.5-5.5M9 15v4.5M9 15H4.5M9 15l-5.5 5.5M15 15h4.5M15 15v4.5m0 0l5.5 5.5"
-                />
-              </svg>
+              <IconExpand v-if="!isContentFullscreen" size="sm" aria-hidden="true" />
+              <IconCollapse v-else size="sm" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -270,22 +195,8 @@
               :class="darkMode ? 'bg-gray-600 hover:bg-gray-700 border-gray-500 text-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300 text-gray-700'"
               :title="isContentFullscreen ? '退出全屏' : '全屏显示'"
             >
-              <svg v-if="!isContentFullscreen" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                />
-              </svg>
-              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 9V4.5M9 9H4.5M9 9L3.5 3.5M15 9h4.5M15 9V4.5M15 9l5.5-5.5M9 15v4.5M9 15H4.5M9 15l-5.5 5.5M15 15h4.5M15 15v4.5m0 0l5.5 5.5"
-                />
-              </svg>
+              <IconExpand v-if="!isContentFullscreen" size="sm" aria-hidden="true" />
+              <IconCollapse v-else size="sm" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -296,7 +207,7 @@
         ref="previewContentRef"
         class="preview-content border rounded-lg overflow-hidden transition-all duration-300 flex flex-col"
         :class="[darkMode ? 'border-gray-700' : 'border-gray-200']"
-        style="max-height: 600px; min-height: 400px"
+        :style="previewContainerStyle"
       >
         <!-- 全屏模式下的工具栏 -->
         <div v-if="isContentFullscreen && isText" class="fullscreen-toolbar p-3 border-b" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'">
@@ -347,23 +258,9 @@
                 :title="$t('mount.filePreview.saveFileShortcut')"
               >
                 <!-- Loading图标 -->
-                <svg v-if="isSaving" class="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path
-                    class="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
+                <div v-if="isSaving" class="w-4 h-4 mr-1 animate-spin rounded-full border-b-2 border-current"></div>
                 <!-- 保存图标 -->
-                <svg v-else class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12"
-                  />
-                </svg>
+                <IconSave v-else size="sm" class="mr-1" aria-hidden="true" />
                 {{ isSaving ? $t("mount.filePreview.saving") : $t("mount.filePreview.save") }}
               </button>
 
@@ -374,14 +271,7 @@
                 :class="darkMode ? 'bg-gray-600 hover:bg-gray-700 border-gray-500 text-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300 text-gray-700'"
                 title="退出全屏"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M9 9V4.5M9 9H4.5M9 9L3.5 3.5M15 9h4.5M15 9V4.5M15 9l5.5-5.5M9 15v4.5M9 15H4.5M9 15l-5.5 5.5M15 15h4.5M15 15v4.5m0 0l5.5 5.5"
-                  />
-                </svg>
+                <IconCollapse size="sm" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -393,10 +283,27 @@
           </div>
         </div>
 
-        <!-- 图片预览 -->
+        <!-- 图片预览 (含 Live Photo 支持) -->
         <div v-else-if="isImage" class="flex-1 flex justify-center items-center p-4">
+          <!-- Live Photo 预览 -->
+          <LivePhotoViewer
+            v-if="isLivePhoto && authenticatedPreviewUrl && livePhotoVideoUrl"
+            :photo-src="authenticatedPreviewUrl"
+            :video-src="livePhotoVideoUrl"
+            :dark-mode="darkMode"
+            :max-width="'100%'"
+            :show-badge="true"
+            :show-badge-text="true"
+            :show-progress="true"
+            :lazy-load="true"
+            :enable-vibration="true"
+            class="max-w-full max-h-[600px]"
+            @load="handleContentLoaded"
+            @error="handleContentError"
+          />
+          <!-- 普通图片预览 -->
           <img
-            v-if="authenticatedPreviewUrl"
+            v-else-if="authenticatedPreviewUrl"
             :src="authenticatedPreviewUrl"
             :alt="file.name"
             class="max-w-full max-h-[600px] object-contain"
@@ -448,10 +355,15 @@
         </div>
 
         <!-- Office文件预览 -->
-        <div v-else-if="isOffice" ref="officePreviewRef" class="office-preview h-[900px] w-full">
+        <div v-else-if="isOffice" ref="officePreviewRef" class="office-preview">
           <OfficeFsPreview
             :preview-url="currentOfficePreviewUrl"
+            :content-url="officeContentUrl"
+            :filename="file.name"
+            :dark-mode="darkMode"
+            :provider-key="selectedOfficeProvider"
             :error-message="officePreviewError"
+            :is-fullscreen="isContentFullscreen"
             @load="handleOfficePreviewLoaded"
             @error="handleOfficePreviewError"
           />
@@ -500,21 +412,7 @@
         <!-- 其他文件类型或错误状态 -->
         <div v-else-if="loadError" class="flex-1 flex items-center justify-center">
           <div class="generic-preview text-center py-12">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-20 w-20 mx-auto mb-4"
-              :class="darkMode ? 'text-red-400' : 'text-red-500'"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="1.5"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
+            <IconExclamationSolid size="5xl" class="mx-auto mb-4" :class="darkMode ? 'text-red-400' : 'text-red-500'" aria-hidden="true" />
             <p class="text-lg font-medium mb-2" :class="darkMode ? 'text-red-300' : 'text-red-700'">{{ t("mount.filePreview.previewError") }}</p>
             <p class="text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">{{ t("mount.filePreview.retryLoad") }}</p>
           </div>
@@ -535,21 +433,7 @@
         <!-- 不支持预览的文件类型 -->
         <div v-else class="flex-1 flex items-center justify-center">
           <div class="generic-preview text-center py-12">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-20 w-20 mx-auto mb-4"
-              :class="darkMode ? 'text-gray-500' : 'text-gray-400'"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="1.5"
-                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-              />
-            </svg>
+            <IconDocument size="5xl" class="mx-auto mb-4" :class="darkMode ? 'text-gray-500' : 'text-gray-400'" aria-hidden="true" />
             <p class="text-lg font-medium mb-2" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">{{ t("mount.filePreview.cannotPreview") }}</p>
             <p class="text-sm" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">{{ t("mount.filePreview.downloadToView") }}</p>
           </div>
@@ -562,8 +446,11 @@
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
+import { IconCollapse, IconDocument, IconDownload, IconError, IconExclamationSolid, IconExpand, IconEye, IconLink, IconSave } from "@/components/icons";
 import { usePreviewRenderers, useFilePreviewExtensions, useFileSave } from "@/composables/index.js";
+import { usePathPassword } from "@/composables/usePathPassword.js";
 import { useAuthStore } from "@/stores/authStore.js";
+import { useFsService } from "@/modules/fs/fsService.js";
 import { getPreviewModeFromFilename, PREVIEW_MODES, SUPPORTED_ENCODINGS } from "@/utils/textUtils.js";
 import { isArchiveFile } from "@/utils/fileTypes.js";
 import AudioPreview from "./AudioPreview.vue";
@@ -572,8 +459,12 @@ import TextPreview from "./TextPreview.vue";
 import ArchivePreview from "./ArchivePreview.vue";
 import PdfFsPreview from "./PdfFsPreview.vue";
 import OfficeFsPreview from "./OfficeFsPreview.vue";
+import { LivePhotoViewer } from "@/components/common/LivePhoto";
+import { detectLivePhoto, isLivePhotoImage } from "@/utils/livePhotoUtils.js";
 
 const { t } = useI18n();
+const pathPassword = usePathPassword();
+const fsService = useFsService();
 
 // Props 定义
 const props = defineProps({
@@ -741,15 +632,34 @@ const currentPdfPreviewUrl = computed(() => {
 // Office 预览状态管理
 const selectedOfficeProvider = ref("");
 
+// Office native 渲染内容 URL：强制使用同源 /api/fs/content（避免跨域直链 fetch）
+const officeContentUrl = computed(() => {
+  const fsPath = props.file?.path || "";
+  if (!fsPath) return "";
+  let url = `/api/fs/content?path=${encodeURIComponent(fsPath)}`;
+
+  // 非管理员访问时，附加路径密码 token（如果存在）
+  if (!props.isAdmin) {
+    const token = pathPassword.getPathToken(fsPath);
+    if (token) {
+      url += `&path_token=${encodeURIComponent(token)}`;
+    }
+  }
+
+  return url;
+});
+
 // Office provider 选项
 const officeProviderOptions = computed(() => {
   const options = [];
   const providers = props.file?.documentPreview?.providers || {};
 
   for (const [key, url] of Object.entries(providers)) {
+    const labelKey = `mount.filePreview.officeProvider.${key}`;
+    const translated = t(labelKey);
     options.push({
       key,
-      label: key,
+      label: translated === labelKey ? key : translated,
       url,
     });
   }
@@ -843,7 +753,17 @@ const availableEncodings = computed(() => {
 const isContentFullscreen = ref(false);
 const previewContentRef = ref(null);
 
-// 动态计算文本预览的最大高度
+const previewContainerStyle = computed(() => {
+  if (isContentFullscreen.value) {
+    return { height: "100vh" };
+  }
+  return {
+    minHeight: "400px",    
+    maxHeight: "80vh",     
+  };
+});
+
+// 动态计算文本预览的最大高度（仅 TextPreview 使用）
 const dynamicMaxHeight = computed(() => {
   if (isContentFullscreen.value) {
     // 全屏模式下：100vh减去工具栏高度(60px)
@@ -916,6 +836,51 @@ const isMarkdown = computed(() => {
 const isArchive = computed(() => {
   return props.file?.name && isArchiveFile(props.file.name);
 });
+
+// Live Photo 检测
+const livePhotoData = computed(() => {
+  if (!props.file?.name || !isLivePhotoImage(props.file.name)) {
+    return { isLivePhoto: false, videoFile: null };
+  }
+  return detectLivePhoto(props.file, props.directoryItems);
+});
+
+const isLivePhoto = computed(() => livePhotoData.value.isLivePhoto);
+
+// Live Photo 视频 URL（注意：<video> 标签无法携带自定义 header；API Key/路径密码场景必须走“预签名直链”）
+const livePhotoVideoUrl = ref("");
+let livePhotoVideoUrlRequestId = 0;
+
+watch(
+  () => livePhotoData.value.videoFile,
+  async (videoFile) => {
+    const currentRequestId = ++livePhotoVideoUrlRequestId;
+
+    if (!videoFile) {
+      livePhotoVideoUrl.value = "";
+      return;
+    }
+
+    // 走 getFileLink 获取预签名 URL（适配 apikey/路径密码）
+    // 说明：当前目录列表的 FsDirectoryItem 类型不包含 previewUrl，因此这里不做 previewUrl 复用分支（避免死代码与误解）。
+    const videoPath = typeof videoFile.path === "string" ? videoFile.path : "";
+    if (!videoPath) {
+      livePhotoVideoUrl.value = "";
+      return;
+    }
+
+    try {
+      const url = await fsService.getFileLink(videoPath, null, false);
+      if (currentRequestId !== livePhotoVideoUrlRequestId) return;
+      livePhotoVideoUrl.value = url || "";
+    } catch (error) {
+      if (currentRequestId !== livePhotoVideoUrlRequestId) return;
+      console.error("[LivePhoto] 获取视频直链失败:", error);
+      livePhotoVideoUrl.value = "";
+    }
+  },
+  { immediate: true }
+);
 
 // 监听模式变化
 watch(textPreviewMode, (newMode) => {
@@ -1013,6 +978,16 @@ onBeforeUnmount(() => {
   border: none;
 }
 
+/* 全屏模式下 Office 预览填满容器 */
+:deep(:fullscreen .office-preview) {
+  height: 100%;
+}
+
+:deep(:fullscreen .office-fs-preview-wrapper) {
+  height: 100%;
+  max-height: none;
+}
+
 /* 确保全屏模式下的控制栏固定在顶部 */
 :deep(:fullscreen .sticky) {
   position: sticky;
@@ -1056,6 +1031,14 @@ button:hover svg {
 /* Markdown预览样式 */
 .markdown-preview {
   line-height: 1.6;
+}
+
+/* Office预览区样式 - 使用 flex 布局确保子组件正确填充 */
+.office-preview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Vditor相关样式 */

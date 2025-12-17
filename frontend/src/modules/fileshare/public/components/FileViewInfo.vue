@@ -5,14 +5,7 @@
       <div class="flex items-center gap-3">
         <!-- 文件图标 -->
         <div class="file-icon flex items-center justify-center w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-700">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" :class="iconClass" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-            />
-          </svg>
+          <IconDocumentText :class="[iconClass, 'h-6 w-6']" />
         </div>
 
         <!-- 文件名和类型 -->
@@ -50,14 +43,102 @@
       </p>
     </div>
 
+    <!-- EXIF 拍摄信息 -->
+    <div v-if="exifData" class="exif-compact mb-4 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden">
+      <!-- 折叠头部：点击切换展开/收起 -->
+      <button
+        type="button"
+        class="w-full p-3 flex items-center justify-between gap-2 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-left"
+        @click="exifExpanded = !exifExpanded"
+      >
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <!-- 相机图标 -->
+          <IconCamera size="sm" class="text-gray-500 dark:text-gray-400 flex-shrink-0" />
+          <!-- 摘要信息 -->
+          <span class="text-sm text-gray-800 dark:text-gray-200 truncate">
+            {{ exifData.summary.camera || '拍摄信息' }}
+          </span>
+          <!-- GPS 指示器 -->
+          <span v-if="!exifExpanded && exifData.gpsCoords" class="flex-shrink-0">
+            <IconLocationMarker class="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
+          </span>
+        </div>
+        <!-- 展开/收起箭头 -->
+        <IconChevronDown
+          size="sm"
+          class="text-gray-400 dark:text-gray-500 flex-shrink-0 transition-transform duration-200"
+          :class="{ 'rotate-180': exifExpanded }"
+        />
+      </button>
+
+      <!-- 可折叠内容区域 -->
+      <transition
+        enter-active-class="transition-all duration-200 ease-out"
+        enter-from-class="max-h-0 opacity-0"
+        enter-to-class="max-h-[500px] opacity-100"
+        leave-active-class="transition-all duration-200 ease-in"
+        leave-from-class="max-h-[500px] opacity-100"
+        leave-to-class="max-h-0 opacity-0"
+      >
+        <div v-show="exifExpanded" class="overflow-hidden">
+          <div class="px-3 pb-3 space-y-2 border-t border-gray-200 dark:border-gray-700 pt-2">
+            <!-- 拍摄参数 -->
+            <div v-if="hasExifParams" class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-mono text-gray-600 dark:text-gray-400">
+                {{ [exifParams.aperture, exifParams.shutter, exifParams.iso ? `ISO ${exifParams.iso}` : '', exifParams.focalLength].filter(Boolean).join(' · ') }}
+              </span>
+            </div>
+
+            <!-- 时间 + 位置 -->
+            <div v-if="exifData.summary.date || exifData.gpsCoords" class="flex items-center gap-2 flex-wrap text-xs text-gray-500 dark:text-gray-400">
+              <!-- 时间 -->
+              <div v-if="exifData.summary.date" class="flex items-center gap-1">
+                <IconClock class="h-3.5 w-3.5" />
+                <span>{{ exifData.summary.date }}</span>
+              </div>
+              <!-- 分隔 -->
+              <span v-if="exifData.summary.date && exifData.gpsCoords" class="text-gray-300 dark:text-gray-600">|</span>
+              <!-- 位置 -->
+              <div v-if="exifData.gpsCoords" class="flex items-center gap-1">
+                <IconLocationMarker class="h-3.5 w-3.5" />
+                <span class="font-mono">{{ formattedGps }}</span>
+                <!-- 地图链接 -->
+                <a :href="googleMapsUrl" target="_blank" rel="noopener noreferrer" class="ml-1 text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300" title="Google Maps" @click.stop>
+                  <IconExternalLink size="sm" class="w-3.5 h-3.5" />
+                </a>
+                <a :href="amapUrl" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300" title="高德地图" @click.stop>
+                  <IconExternalLink size="sm" class="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+
+            <!-- 地图嵌入（仅展开时渲染） -->
+            <div v-if="exifData.gpsCoords && !mapLoadError" class="mt-2 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+              <MapEmbed
+                :lat="exifData.gpsCoords.lat"
+                :lng="exifData.gpsCoords.lng"
+                :height="140"
+                :interactive="true"
+                :show-zoom-controls="true"
+                @load="handleMapLoad"
+                @error="handleMapError"
+              />
+            </div>
+            <!-- 地图加载失败时的兜底 -->
+            <div v-else-if="exifData.gpsCoords && mapLoadError" class="mt-2 p-3 rounded-lg bg-gray-200 dark:bg-gray-700 text-center">
+              <span class="text-xs text-gray-500 dark:text-gray-400">地图加载失败</span>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </div>
+
     <!-- 文件元数据 -->
     <div class="file-metadata grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
       <!-- 创建时间 -->
       <div class="metadata-item p-3 rounded-lg bg-gray-100 dark:bg-gray-700">
         <div class="flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
+          <IconCalendar size="md" class="mr-2 text-gray-500 dark:text-gray-400" />
           <span class="text-sm font-medium text-gray-600 dark:text-gray-200">{{ t("fileView.fileInfo.uploadTime") }}</span>
         </div>
         <p class="mt-1 text-sm pl-7 text-gray-800 dark:text-white">{{ formattedCreatedAt }}</p>
@@ -66,15 +147,7 @@
       <!-- 访问次数 -->
       <div class="metadata-item p-3 rounded-lg bg-gray-100 dark:bg-gray-700">
         <div class="flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-            />
-          </svg>
+          <IconEye size="md" class="mr-2 text-gray-500 dark:text-gray-400" />
           <span class="text-sm font-medium text-gray-600 dark:text-gray-200">{{ t("fileView.fileInfo.accessCount") }}</span>
         </div>
         <p class="mt-1 text-sm pl-7 text-gray-800 dark:text-white">
@@ -86,9 +159,7 @@
       <!-- 过期时间 -->
       <div v-if="fileInfo.expires_at" class="metadata-item p-3 rounded-lg bg-gray-100 dark:bg-gray-700">
         <div class="flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+          <IconClock size="md" class="mr-2 text-gray-500 dark:text-gray-400" />
           <span class="text-sm font-medium text-gray-600 dark:text-gray-200">{{ t("fileView.fileInfo.expiresAt") }}</span>
         </div>
         <p class="mt-1 text-sm pl-7 text-gray-800 dark:text-white">{{ formattedExpiresAt }}</p>
@@ -97,14 +168,7 @@
       <!-- 访问模式 -->
       <div class="metadata-item p-3 rounded-lg bg-gray-100 dark:bg-gray-700">
         <div class="flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-            />
-          </svg>
+          <IconShieldCheck size="md" class="mr-2 text-gray-500 dark:text-gray-400" />
           <span class="text-sm font-medium text-gray-600 dark:text-gray-200">{{ t("fileView.fileInfo.accessMode") }}</span>
         </div>
         <p class="mt-1 text-sm pl-7 text-gray-800 dark:text-white">
@@ -117,14 +181,7 @@
       <!-- 文件短链接 -->
       <div class="metadata-item p-3 rounded-lg bg-gray-100 dark:bg-gray-700">
         <div class="flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-            />
-          </svg>
+          <IconLink size="md" class="mr-2 text-gray-500 dark:text-gray-400" />
           <span class="text-sm font-medium text-gray-600 dark:text-gray-200">{{ t("fileView.fileInfo.fileLink") }}</span>
         </div>
         <div class="mt-1 pl-7 flex items-center relative">
@@ -137,14 +194,7 @@
             class="ml-2 p-1 rounded hover:bg-opacity-80 transition-colors bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500"
             :title="t('fileView.fileInfo.copyLink')"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
-              />
-            </svg>
+            <IconCopy size="sm" class="h-4 w-4" />
           </button>
 
           <!-- 复制成功提示 -->
@@ -153,9 +203,7 @@
             class="absolute right-0 -top-10 px-3 py-2 rounded-md shadow-md text-sm transition-opacity duration-300 bg-white dark:bg-gray-700 text-green-600 dark:text-green-400 border border-gray-200 dark:border-gray-600"
           >
             <div class="flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-              </svg>
+              <IconCheck size="sm" class="h-4 w-4 mr-1" />
               {{ t("fileView.fileInfo.linkCopied") }}
             </div>
           </div>
@@ -171,6 +219,8 @@ import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { getFilePassword as resolveFilePassword } from "@/utils/filePasswordUtils.js";
 import { useFileshareService } from "@/modules/fileshare/fileshareService.js";
+import { isImageLikeForExif, loadExifTagsFromArrayBufferAsync, buildExifRows, resolveGpsCoordinates } from "@/utils/exifReaderUtils.js";
+import { IconCalendar, IconCamera, IconCheck, IconChevronDown, IconClock, IconCopy, IconDocumentText, IconExternalLink, IconEye, IconLink, IconLocationMarker, IconShieldCheck } from "@/components/icons";
 
 const { t } = useI18n();
 const fileshareService = useFileshareService();
@@ -189,8 +239,9 @@ import TextPreview from "./previews/TextPreview.vue";
 import CodePreview from "./previews/CodePreview.vue";
 import MarkdownPreview from "./previews/MarkdownPreview.vue";
 import HtmlPreview from "./previews/HtmlPreview.vue";
-import OfficePreview from "./previews/OfficePreview.vue";
+import OfficeSharePreview from "./previews/OfficeSharePreview.vue";
 import GenericPreview from "./previews/GenericPreview.vue";
+import MapEmbed from "@/components/common/MapEmbed.vue";
 
 const props = defineProps({
   fileInfo: {
@@ -210,6 +261,21 @@ const shareUrl = computed(() => {
 
 // 复制成功提示状态
 const showCopyToast = ref(false);
+
+// EXIF 相关状态
+const exifData = ref(null); // { gpsCoords, summary, rows }
+const exifExpanded = ref(false);
+const mapLoadError = ref(false);
+
+// 地图事件处理
+const handleMapLoad = () => {
+  mapLoadError.value = false;
+};
+
+const handleMapError = () => {
+  mapLoadError.value = true;
+};
+const showExifSection = computed(() => isImageLikeForExif({ ...props.fileInfo, name: props.fileInfo.filename }));
 
 const getFilePassword = () => resolveFilePassword({ file: props.fileInfo });
 
@@ -291,7 +357,7 @@ const currentPreviewComponent = computed(() => {
     MarkdownPreview,
     HtmlPreview,
     TextPreview,
-    OfficePreview,
+    OfficeSharePreview,
     GenericPreview,
   };
 
@@ -408,11 +474,9 @@ const previewComponentProps = computed(() => {
   if (isOfficeFile.value) {
     return {
       providers: props.fileInfo.documentPreview?.providers || {},
-      nativeUrl: previewUrl,
-      mimetype: props.fileInfo.mimetype,
       filename: props.fileInfo.filename,
-      useProxy: props.fileInfo.use_proxy,
       downloadUrl: fileshareService.getPermanentDownloadUrl(props.fileInfo),
+      contentUrl: effectiveContentUrl,
     };
   }
 
@@ -420,6 +484,10 @@ const previewComponentProps = computed(() => {
     return {
       ...baseProps,
       previewUrl,
+      darkMode: props.darkMode,
+      // Live Photo 支持：videoUrl 需要从外部传入（如果有配对的视频文件）
+      // 在单文件分享场景中，通常不会有配对的视频文件
+      videoUrl: "",
     };
   }
 
@@ -440,17 +508,9 @@ const previewComponentProps = computed(() => {
 });
 
 // 动态组件事件处理
-const handlePreviewLoad = () => {
-  console.log("预览加载完成");
-};
-
-const handlePreviewError = (error) => {
-  console.error("预览加载失败:", error);
-};
-
-const handleToggleMode = (mode) => {
-  console.log("HTML预览模式切换:", mode);
-};
+const handlePreviewLoad = () => undefined;
+const handlePreviewError = () => undefined;
+const handleToggleMode = () => undefined;
 
 
 
@@ -466,17 +526,118 @@ const copyToClipboard = async (text) => {
       setTimeout(() => {
         showCopyToast.value = false;
       }, 3000);
-      console.log("复制成功");
     } else {
       throw new Error("复制失败");
     }
-  } catch (err) {
-    console.error("复制失败:", err);
-    // 复制失败时也显示提示，但内容不同
-    console.error("复制失败，需要手动复制");
-    // 这里可以添加更友好的错误提示，比如显示一个模态框让用户手动复制
+  } catch {
+    // 复制失败时保持静默（后续如需更友好提示，再单独做 UI 交互）
   }
 };
+
+// EXIF 解析逻辑
+const parseExif = async () => {
+  if (!showExifSection.value || !processedPreviewUrl.value) {
+    exifData.value = null;
+    return;
+  }
+
+  try {
+    const url = processedPreviewUrl.value;
+    // 跳过 blob/data URL
+    if (url.startsWith("blob:") || url.startsWith("data:")) {
+      exifData.value = null;
+      return;
+    }
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+    const ct = String(res.headers.get("content-type") || "").toLowerCase();
+    if (ct && ct.includes("text/html")) throw new Error("unexpected content-type");
+
+    const buf = await res.arrayBuffer();
+    const tags = await loadExifTagsFromArrayBufferAsync(buf);
+    const gpsCoords = resolveGpsCoordinates(tags);
+    const rows = buildExifRows(tags).filter((r) => r.key !== "location");
+
+    // 构建紧凑摘要
+    const summary = buildExifSummary(rows);
+    const hasSummary = !!(summary.camera || summary.params || summary.date);
+    const hasGps = !!gpsCoords;
+    // 保留 rows 供 exifParams 使用
+    exifData.value = hasSummary || hasGps ? { gpsCoords, summary, rows } : null;
+  } catch {
+    exifData.value = null;
+  }
+};
+
+// 构建紧凑摘要文本
+const buildExifSummary = (rows) => {
+  const result = { camera: "", params: "", date: "" };
+  const rowMap = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+
+  // 相机 + 镜头
+  const cameraParts = [rowMap.camera, rowMap.lensModel].filter(Boolean);
+  result.camera = cameraParts.join(" · ");
+
+  // 拍摄参数：光圈 · 快门 · ISO · 焦距
+  const paramParts = [rowMap.aperture, rowMap.shutter, rowMap.iso, rowMap.focalLength].filter(Boolean);
+  result.params = paramParts.join(" · ");
+
+  // 拍摄时间
+  result.date = rowMap.dateTimeOriginal || "";
+
+  return result;
+};
+
+// 单独的 EXIF 参数（用于网格展示）
+const exifParams = computed(() => {
+  if (!exifData.value?.rows) return {};
+  const rowMap = Object.fromEntries(exifData.value.rows.map((r) => [r.key, r.value]));
+  return {
+    aperture: rowMap.aperture || "",
+    shutter: rowMap.shutter || "",
+    iso: rowMap.iso ? rowMap.iso.replace(/^ISO\s*/i, "") : "",
+    focalLength: rowMap.focalLength || "",
+  };
+});
+
+// 是否有任何 EXIF 参数
+const hasExifParams = computed(() => {
+  const p = exifParams.value;
+  return !!(p.aperture || p.shutter || p.iso || p.focalLength);
+});
+
+// Google Maps URL
+const googleMapsUrl = computed(() => {
+  if (!exifData.value?.gpsCoords) return "";
+  const { lat, lng } = exifData.value.gpsCoords;
+  const safeLat = Math.min(90, Math.max(-90, Number(lat) || 0));
+  const safeLng = Math.min(180, Math.max(-180, Number(lng) || 0));
+  const url = new URL("https://www.google.com/maps");
+  url.searchParams.set("q", `${safeLat},${safeLng}`);
+  return url.toString();
+});
+
+// 高德地图 URL
+const amapUrl = computed(() => {
+  if (!exifData.value?.gpsCoords) return "";
+  const { lat, lng } = exifData.value.gpsCoords;
+  const safeLat = Math.min(90, Math.max(-90, Number(lat) || 0));
+  const safeLng = Math.min(180, Math.max(-180, Number(lng) || 0));
+  const url = new URL("https://uri.amap.com/marker");
+  url.searchParams.set("position", `${safeLng},${safeLat}`);
+  url.searchParams.set("name", "拍摄位置");
+  return url.toString();
+});
+
+// 格式化 GPS 坐标显示
+const formattedGps = computed(() => {
+  if (!exifData.value?.gpsCoords) return "";
+  const { lat, lng } = exifData.value.gpsCoords;
+  const latDir = lat >= 0 ? "N" : "S";
+  const lngDir = lng >= 0 ? "E" : "W";
+  return `${Math.abs(lat).toFixed(5)}°${latDir} ${Math.abs(lng).toFixed(5)}°${lngDir}`;
+});
 
 // 确保密码被保存到会话存储
 const savePasswordToSessionStorage = () => {
@@ -501,11 +662,10 @@ const savePasswordToSessionStorage = () => {
 
     // 如果找到了密码，保存到会话存储
     if (password) {
-      console.log("保存密码到会话存储", { slug: props.fileInfo.slug });
       sessionStorage.setItem(`file_password_${props.fileInfo.slug}`, password);
     }
-  } catch (err) {
-    console.error("保存密码到会话存储出错:", err);
+  } catch {
+    // ignore
   }
 };
 
@@ -514,11 +674,10 @@ onMounted(() => {
   savePasswordToSessionStorage();
 });
 
-// 监听预览URL变化（预览组件会自动响应URL变化）
 watch(
   () => processedPreviewUrl.value,
-  (newUrl) => {
-    console.log("预览URL变化:", newUrl);
+  () => {
+    void parseExif();
   },
   { immediate: true },
 );
