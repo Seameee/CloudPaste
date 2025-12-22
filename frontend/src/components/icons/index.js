@@ -13,6 +13,7 @@ import IconSettingsSvg from '~icons/heroicons-outline/cog'
 import IconCheckboxSvg from '~icons/heroicons-outline/check-circle'
 import IconTaskListSvg from '~icons/heroicons-outline/clipboard-list'
 import IconChartBarSvg from '~icons/heroicons-outline/chart-bar'
+import IconCalculatorSvg from '~icons/heroicons-outline/calculator'
 import IconFolderPlusSvg from '~icons/heroicons-outline/folder-add'
 import IconPlusSvg from '~icons/heroicons-outline/plus'
 import IconMinusSvg from '~icons/heroicons-outline/minus'
@@ -101,6 +102,45 @@ import IconMdiInformationOutlineSvg from '~icons/mdi/information-outline'
 import IconMdiGoogleMapsSvg from '~icons/mdi/google-maps'
 import IconMdiMapMarkerSvg from '~icons/mdi/map-marker'
 import IconTranslateSvg from '~icons/mdi/translate'
+import IconTableCellsSvg from '~icons/heroicons-outline/table-cells'
+import IconBoltSvg from '~icons/heroicons-outline/bolt'
+import IconArrowPathSvg from '~icons/heroicons-outline/arrow-path'
+import IconChartPieSvg from '~icons/heroicons-outline/chart-pie'
+import IconActivitySvg from '~icons/heroicons-outline/lightning-bolt'
+import IconAlertCircleSvg from '~icons/heroicons-outline/exclamation-circle'
+import IconDatabaseSvg from '~icons/heroicons-outline/circle-stack'
+import IconFilterSvg from '~icons/heroicons-outline/funnel'
+import IconLoaderSvg from '~icons/heroicons-outline/arrow-path'
+import IconMoreHorizontalSvg from '~icons/heroicons-outline/ellipsis-horizontal'
+import IconSyncSvg from '~icons/heroicons-outline/arrow-path'
+import IconPlaySvg from '~icons/heroicons-outline/play'
+import IconBanSvg from '~icons/heroicons-outline/ban'
+import IconBellSvg from '~icons/heroicons-outline/bell'
+import IconQueueListSvg from '~icons/heroicons-outline/queue-list'
+
+// 书签和导航图标
+import IconBookmarkSvg from '~icons/heroicons-outline/bookmark'
+import IconBookmarkSolidSvg from '~icons/heroicons-solid/bookmark'
+import IconArrowLeftSvg from '~icons/heroicons-outline/arrow-left'
+import IconArrowRightSvg from '~icons/heroicons-outline/arrow-right'
+
+// 存储类型图标
+import IconMicrosoftOneDriveSvg from '~icons/mdi/microsoft-onedrive'
+import IconGoogleDriveSvg from '~icons/mdi/google-drive'
+import IconStorageGitHubSvg from '~icons/mdi/github'
+import IconCloudSyncOutlineSvg from '~icons/mdi/cloud-sync-outline'
+import IconMdiFolderSvg from '~icons/mdi/folder'
+
+// 压缩文件类型图标
+import IconFolderZipSvg from '~icons/mdi/folder-zip'
+import IconFolderZipOutlineSvg from '~icons/mdi/folder-zip-outline'
+import IconZipBoxSvg from '~icons/mdi/zip-box'
+import IconZipBoxOutlineSvg from '~icons/mdi/zip-box-outline'
+import IconPackageVariantSvg from '~icons/mdi/package-variant'
+import IconPackageVariantClosedSvg from '~icons/mdi/package-variant-closed'
+import IconArchiveOutlineSvg from '~icons/mdi/archive-outline'
+import IconDiscSvg from '~icons/mdi/disc'
+import IconFileTreeSvg from '~icons/mdi/file-tree'
 
 const normalizeClassName = (value) => {
   if (!value) return ''
@@ -175,6 +215,8 @@ export const IconCheckbox = createIcon(IconCheckboxSvg)
 export const IconTaskList = createIcon(IconTaskListSvg)
 
 export const IconChartBar = createIcon(IconChartBarSvg)
+export const IconChartPie = createIcon(IconChartPieSvg)
+export const IconCalculator = createIcon(IconCalculatorSvg)
 
 export const IconFolderPlus = createIcon(IconFolderPlusSvg)
 
@@ -354,6 +396,52 @@ export const IconMdiMapMarker = createIcon(IconMdiMapMarkerSvg)
 // 语言/翻译图标（用于 LanguageSwitcher）
 export const IconTranslate = createIcon(IconTranslateSvg)
 
+// 索引管理专用图标
+export const IconTable = createIcon(IconTableCellsSvg)
+export const IconRebuild = createIcon(IconArrowPathSvg)
+export const IconUpdate = createIcon(IconBoltSvg)
+export const IconBolt = createIcon(IconBoltSvg)
+export const IconTrash = createIcon(IconDeleteSvg)
+
+// 任务管理专用图标
+export const IconActivity = createIcon(IconActivitySvg)
+export const IconAlertCircle = createIcon(IconAlertCircleSvg)
+export const IconDatabase = createIcon(IconDatabaseSvg)
+export const IconFilter = createIcon(IconFilterSvg)
+export const IconLoader = createIcon(IconLoaderSvg)
+export const IconMoreHorizontal = createIcon(IconMoreHorizontalSvg)
+export const IconSync = createIcon(IconSyncSvg)
+export const IconPlay = createIcon(IconPlaySvg)
+export const IconBan = createIcon(IconBanSvg)
+export const IconBell = createIcon(IconBellSvg)
+export const IconQueueList = createIcon(IconQueueListSvg)
+export const IconX = createIcon(IconCloseSvg)
+
+// 书签和导航图标
+export const IconBookmark = createIcon(IconBookmarkSvg)
+export const IconBookmarkSolid = createIcon(IconBookmarkSolidSvg)
+export const IconArrowLeft = createIcon(IconArrowLeftSvg)
+export const IconArrowRight = createIcon(IconArrowRightSvg)
+
+// 存储类型图标（MDI）
+export const IconStorageS3 = createIcon(IconMdiDatabaseOutlineSvg)
+export const IconStorageOneDrive = createIcon(IconMicrosoftOneDriveSvg)
+export const IconStorageGoogleDrive = createIcon(IconGoogleDriveSvg)
+export const IconStorageGitHub = createIcon(IconStorageGitHubSvg)
+export const IconStorageWebDAV = createIcon(IconCloudSyncOutlineSvg)
+export const IconStorageLocal = createIcon(IconMdiFolderSvg)
+
+// 压缩文件类型图标（MDI）
+export const IconFolderZip = createIcon(IconFolderZipSvg)
+export const IconFolderZipOutline = createIcon(IconFolderZipOutlineSvg)
+export const IconZipBox = createIcon(IconZipBoxSvg)
+export const IconZipBoxOutline = createIcon(IconZipBoxOutlineSvg)
+export const IconPackageVariant = createIcon(IconPackageVariantSvg)
+export const IconPackageVariantClosed = createIcon(IconPackageVariantClosedSvg)
+export const IconArchiveOutline = createIcon(IconArchiveOutlineSvg)
+export const IconDisc = createIcon(IconDiscSvg)
+export const IconFileTree = createIcon(IconFileTreeSvg)
+
 // 导出所有图标
 export default {
   IconUpload,
@@ -363,6 +451,8 @@ export default {
   IconCheckbox,
   IconTaskList,
   IconChartBar,
+  IconChartPie,
+  IconCalculator,
   IconFolderPlus,
   IconPlus,
   IconMinus,
@@ -450,5 +540,40 @@ export default {
   IconMdiInformationOutline,
   IconMdiGoogleMaps,
   IconMdiMapMarker,
-  IconTranslate
+  IconTranslate,
+  IconTable,
+  IconRebuild,
+  IconUpdate,
+  IconTrash,
+  IconActivity,
+  IconAlertCircle,
+  IconDatabase,
+  IconFilter,
+  IconLoader,
+  IconMoreHorizontal,
+  IconSync,
+  IconPlay,
+  IconBan,
+  IconBell,
+  IconQueueList,
+  IconX,
+  IconBookmark,
+  IconBookmarkSolid,
+  IconArrowLeft,
+  IconArrowRight,
+  IconStorageS3,
+  IconStorageOneDrive,
+  IconStorageGoogleDrive,
+  IconStorageGitHub,
+  IconStorageWebDAV,
+  IconStorageLocal,
+  IconFolderZip,
+  IconFolderZipOutline,
+  IconZipBox,
+  IconZipBoxOutline,
+  IconPackageVariant,
+  IconPackageVariantClosed,
+  IconArchiveOutline,
+  IconDisc,
+  IconFileTree
 }

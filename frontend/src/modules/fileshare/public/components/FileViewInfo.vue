@@ -5,7 +5,7 @@
       <div class="flex items-center gap-3">
         <!-- 文件图标 -->
         <div class="file-icon flex items-center justify-center w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-700">
-          <IconDocumentText :class="[iconClass, 'h-6 w-6']" />
+          <component :is="headerIconComponent" :class="[iconClass, 'h-6 w-6']" />
         </div>
 
         <!-- 文件名和类型 -->
@@ -214,19 +214,19 @@
 </template>
 
 <script setup>
-import { computed, ref, defineProps, onMounted, watch, onUnmounted } from "vue";
+import { computed, ref, onMounted, watch, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { getFilePassword as resolveFilePassword } from "@/utils/filePasswordUtils.js";
 import { useFileshareService } from "@/modules/fileshare/fileshareService.js";
 import { isImageLikeForExif, loadExifTagsFromArrayBufferAsync, buildExifRows, resolveGpsCoordinates } from "@/utils/exifReaderUtils.js";
-import { IconCalendar, IconCamera, IconCheck, IconChevronDown, IconClock, IconCopy, IconDocumentText, IconExternalLink, IconEye, IconLink, IconLocationMarker, IconShieldCheck } from "@/components/icons";
+import { IconBookOpen, IconCalendar, IconCamera, IconCheck, IconChevronDown, IconClock, IconCopy, IconDocumentText, IconExternalLink, IconEye, IconLink, IconLocationMarker, IconShieldCheck } from "@/components/icons";
 
 const { t } = useI18n();
 const fileshareService = useFileshareService();
 const route = useRoute();
-import { getPreviewComponent, formatFileSize, FileType, getIconType } from "@/utils/fileTypes.js";
-import { getPreviewModeFromFilename, PREVIEW_MODES } from "@/utils/textUtils.js";
+import { formatFileSize, getIconType } from "@/utils/fileTypes.js";
+import { resolvePreviewSelection, PREVIEW_KEYS } from "@/composables/index.js";
 import { formatDateTime } from "@/utils/timeUtils.js";
 import { copyToClipboard as clipboardCopy } from "@/utils/clipboard";
 
@@ -235,12 +235,11 @@ import ImagePreview from "./previews/ImagePreview.vue";
 import VideoPreview from "./previews/VideoPreview.vue";
 import AudioPreview from "./previews/AudioPreview.vue";
 import PdfPreview from "./previews/PdfPreview.vue";
+import EpubPreview from "./previews/EpubPreview.vue";
 import TextPreview from "./previews/TextPreview.vue";
-import CodePreview from "./previews/CodePreview.vue";
-import MarkdownPreview from "./previews/MarkdownPreview.vue";
-import HtmlPreview from "./previews/HtmlPreview.vue";
 import OfficeSharePreview from "./previews/OfficeSharePreview.vue";
 import GenericPreview from "./previews/GenericPreview.vue";
+import IframePreview from "@/components/common/IframePreview.vue";
 import MapEmbed from "@/components/common/MapEmbed.vue";
 
 const props = defineProps({
@@ -284,9 +283,13 @@ const processedPreviewUrl = computed(() => {
   return fileshareService.getPermanentPreviewUrl(props.fileInfo) || "";
 });
 
+const resolvedPreview = computed(() => resolvePreviewSelection({ file: props.fileInfo }));
+
+const previewKey = computed(() => resolvedPreview.value.key);
+
 // 格式化的文件大小
 const formattedSize = computed(() => {
-  return formatFileSize(props.fileInfo.size || 0);
+  return typeof props.fileInfo.size === "number" ? formatFileSize(props.fileInfo.size) : "-";
 });
 
 // 格式化的MIME类型
@@ -306,27 +309,13 @@ const formattedExpiresAt = computed(() => {
 
 // 文件信息（直接使用后端type字段）
 
-// 文件类型判断计算属性 - 遵循 usePreviewRenderers.js 的标准模式
-const isOfficeFile = computed(() => props.fileInfo.type === FileType.OFFICE);
-const isText = computed(() => props.fileInfo.type === FileType.TEXT);
-const isImage = computed(() => props.fileInfo.type === FileType.IMAGE);
-const isVideo = computed(() => props.fileInfo.type === FileType.VIDEO);
-const isAudio = computed(() => props.fileInfo.type === FileType.AUDIO);
-
-// 文本文件的细分类型判断 - 使用标准化的工具类函数
-const textPreviewMode = computed(() => {
-  if (!isText.value) return null;
-  return getPreviewModeFromFilename(props.fileInfo.filename || "");
-});
-
-const isCode = computed(() => textPreviewMode.value === PREVIEW_MODES.CODE);
-const isMarkdown = computed(() => textPreviewMode.value === PREVIEW_MODES.MARKDOWN);
-const isHtml = computed(() => textPreviewMode.value === PREVIEW_MODES.HTML);
-
-// PDF文件判断
-const isPdf = computed(() => {
-  return props.fileInfo.type === FileType.DOCUMENT;
-});
+const isOfficeFile = computed(() => previewKey.value === PREVIEW_KEYS.OFFICE);
+const isImage = computed(() => previewKey.value === PREVIEW_KEYS.IMAGE);
+const isVideo = computed(() => previewKey.value === PREVIEW_KEYS.VIDEO);
+const isAudio = computed(() => previewKey.value === PREVIEW_KEYS.AUDIO);
+const isPdf = computed(() => previewKey.value === PREVIEW_KEYS.PDF);
+const isEpub = computed(() => previewKey.value === PREVIEW_KEYS.EPUB);
+const isText = computed(() => previewKey.value === PREVIEW_KEYS.TEXT);
 
 // 文件图标类名 - 使用标准的 getIconType 函数
 const iconClass = computed(() => {
@@ -338,80 +327,47 @@ const iconClass = computed(() => {
     audio: "text-blue-500",
     text: "text-yellow-500",
     document: "text-red-500",
+    book: "text-amber-500",
     folder: "text-blue-500",
     file: "text-gray-500",
   };
   return colorMap[iconType] || "text-gray-500";
 });
 
-const currentPreviewComponent = computed(() => {
-  const componentName = getPreviewComponent(props.fileInfo);
+// 分享页头部图标：电子书用“书本”，其余先保持原来的“文档”图标（避免一次性改太多 UI）
+const headerIconComponent = computed(() => {
+  const iconType = getIconType(props.fileInfo);
+  if (iconType === "book") return IconBookOpen;
+  return IconDocumentText;
+});
 
-  // 组件映射
+const currentPreviewComponent = computed(() => {
   const componentMap = {
-    ImagePreview,
-    VideoPreview,
-    AudioPreview,
-    PdfPreview,
-    CodePreview,
-    MarkdownPreview,
-    HtmlPreview,
-    TextPreview,
-    OfficeSharePreview,
-    GenericPreview,
+    [PREVIEW_KEYS.IMAGE]: ImagePreview,
+    [PREVIEW_KEYS.VIDEO]: VideoPreview,
+    [PREVIEW_KEYS.AUDIO]: AudioPreview,
+    [PREVIEW_KEYS.PDF]: PdfPreview,
+    [PREVIEW_KEYS.EPUB]: EpubPreview,
+    [PREVIEW_KEYS.TEXT]: TextPreview,
+    [PREVIEW_KEYS.OFFICE]: OfficeSharePreview,
+    [PREVIEW_KEYS.IFRAME]: IframePreview,
+    [PREVIEW_KEYS.ARCHIVE]: GenericPreview,
+    [PREVIEW_KEYS.DOWNLOAD]: GenericPreview,
   };
 
-  return componentMap[componentName] || GenericPreview;
+  return componentMap[previewKey.value] || GenericPreview;
 });
 
 // 是否应该显示预览
 const shouldShowPreview = computed(() => {
-  // 文本类预览不依赖 processedPreviewUrl（直链能力），只要识别为文本类就应显示并走 contentUrl
-  if (isText.value || isCode.value || isMarkdown.value || isHtml.value) {
+  // 文本预览不依赖 processedPreviewUrl（直链能力），只要识别为文本就应显示并走 contentUrl
+  if (isText.value) {
     return true;
   }
   return Boolean(processedPreviewUrl.value) || isOfficeFile.value;
 });
 
 // 注意：预览能力检查现在通过 shouldShowPreview 计算属性处理
-
-// 获取代码文件的语言类型
-const getCodeLanguage = computed(() => {
-  if (!props.fileInfo.filename) return t("fileView.preview.code.title");
-
-  const extension = props.fileInfo.filename.split(".").pop().toLowerCase();
-  const languageMap = {
-    // 编程语言
-    js: "JavaScript",
-    ts: "TypeScript",
-    py: "Python",
-    java: "Java",
-    c: "C",
-    cpp: "C++",
-    cs: "C#",
-    go: "Go",
-    php: "PHP",
-    rb: "Ruby",
-    swift: "Swift",
-    kt: "Kotlin",
-    rs: "Rust",
-    sh: "Shell",
-    sql: "SQL",
-    xml: "XML",
-    json: "JSON",
-    yaml: "YAML",
-    toml: "TOML",
-    // UI/前端
-    css: "CSS",
-    scss: "SCSS",
-    less: "LESS",
-    vue: "Vue",
-    jsx: "JSX",
-    tsx: "TSX",
-  };
-
-  return languageMap[extension] || t("fileView.preview.code.title");
-});
 
 
 // 动态组件属性配置
@@ -431,49 +387,49 @@ const previewComponentProps = computed(() => {
     ? fileshareService.getPermanentContentUrl({ ...props.fileInfo, slug: effectiveSlug })
     : "";
 
-  // 所有“文本类预览”组件仅接收 contentUrl，由 gateway / LinkService 统一决定直链或代理
-  if (isText.value || isCode.value) {
+  // 文本预览统一使用同一个组件：组件内部提供“文本/代码/Markdown/HTML”切换
+  if (isText.value) {
     return {
       ...baseProps,
       contentUrl: effectiveContentUrl,
-      title: isCode.value ? t("fileView.preview.code.title") : t("fileView.preview.text.title"),
-      language: isCode.value ? getCodeLanguage.value : "",
-      loadingText: isCode.value ? t("fileView.preview.code.loading") : t("fileView.preview.text.loading"),
       darkMode: props.darkMode,
+      loadingText: t("fileView.preview.text.loading"),
     };
   }
 
-  if (isMarkdown.value) {
+  if (previewKey.value === PREVIEW_KEYS.IFRAME) {
     return {
-      ...baseProps,
-      contentUrl: effectiveContentUrl,
+      providers: resolvedPreview.value.providers || {},
       darkMode: props.darkMode,
-    };
-  }
-
-  if (isHtml.value) {
-    return {
-      ...baseProps,
-      contentUrl: effectiveContentUrl,
-      darkMode: props.darkMode,
+      loadingText: t("fileView.preview.loading"),
+      errorText: t("fileView.preview.error"),
     };
   }
 
   // PDF文件特殊处理：支持 DocumentApp 多渠道（如 pdfjs / 原生浏览器）
   if (isPdf.value) {
-    const preview = props.fileInfo.documentPreview || null;
-    const providers = (preview && preview.providers) || {};
+  const providers = resolvedPreview.value.providers || {};
+  return {
+    ...baseProps,
+    previewUrl,
+    providers,
+    nativeUrl: previewUrl,
+  };
+  }
+
+  // EPUB：支持 native（foliate-js 本地渲染）+ 外部 iframe 预览器
+  if (isEpub.value) {
     return {
-      ...baseProps,
+      providers: resolvedPreview.value.providers || {},
       previewUrl,
-      providers,
       nativeUrl: previewUrl,
+      darkMode: props.darkMode,
     };
   }
 
   if (isOfficeFile.value) {
     return {
-      providers: props.fileInfo.documentPreview?.providers || {},
+      providers: resolvedPreview.value.providers || {},
       filename: props.fileInfo.filename,
       downloadUrl: fileshareService.getPermanentDownloadUrl(props.fileInfo),
       contentUrl: effectiveContentUrl,

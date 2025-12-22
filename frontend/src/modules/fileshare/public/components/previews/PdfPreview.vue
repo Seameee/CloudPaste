@@ -22,10 +22,12 @@
     ></iframe>
     <!-- PDF加载状态 -->
     <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg">
-      <div class="text-center">
-        <IconRefresh class="animate-spin h-8 w-8 text-blue-500 mx-auto mb-2" />
-        <p class="text-blue-600 dark:text-blue-400">{{ t("fileView.preview.pdf.loading") }}</p>
-      </div>
+      <LoadingIndicator
+        :text="t('fileView.preview.pdf.loading')"
+        size="xl"
+        icon-class="text-blue-500 dark:text-blue-400"
+        text-class="text-blue-600 dark:text-blue-400"
+      />
     </div>
     <!-- PDF错误状态 -->
     <div v-if="error" class="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg">
@@ -39,9 +41,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { IconExclamation, IconRefresh } from "@/components/icons";
+import { IconExclamation } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
+import { useProviderSelector } from "@/composables/file-preview/useProviderSelector.js";
 
 const { t } = useI18n();
 
@@ -68,37 +72,19 @@ const emit = defineEmits(["load", "error"]);
 const loading = ref(true);
 const error = ref(false);
 
-// 可用预览渠道（包含原生）
-const providerOptions = computed(() => {
-  const options = [];
+const resolvedNativeUrl = computed(() => props.nativeUrl || props.previewUrl || "");
 
-  if (props.nativeUrl || props.previewUrl) {
-    options.push({
-      key: "native",
-      label: t("fileView.preview.pdf.browserNative"),
-      url: props.nativeUrl || props.previewUrl,
-    });
-  }
-
-  const providers = props.providers || {};
-  for (const key of Object.keys(providers)) {
-    options.push({
-      key,
-      label: key,
-      url: providers[key],
-    });
-  }
-
-  return options;
-});
-
-const selectedProviderKey = ref("native");
-
-const currentPreviewUrl = computed(() => {
-  const options = providerOptions.value;
-  if (!options.length) return "";
-  const current = options.find((opt) => opt.key === selectedProviderKey.value) || options[0];
-  return current.url || "";
+const {
+  providerOptions,
+  selectedKey: selectedProviderKey,
+  currentUrl: currentPreviewUrl,
+} = useProviderSelector({
+  providers: computed(() => props.providers || {}),
+  nativeUrl: resolvedNativeUrl,
+  nativeLabel: computed(() => t("fileView.preview.pdf.browserNative")),
+  labelMap: computed(() => ({
+    pdfjs: t("fileView.preview.pdf.pdfjsLabel"),
+  })),
 });
 
 const handleLoad = () => {
@@ -113,11 +99,13 @@ const handleError = () => {
   emit("error");
 };
 
-onMounted(() => {
-  const opts = providerOptions.value;
-  if (opts.length) {
-    // 默认优先使用浏览器原生预览
-    selectedProviderKey.value = "native";
-  }
-});
+watch(
+  currentPreviewUrl,
+  (url) => {
+    if (!url) return;
+    loading.value = true;
+    error.value = false;
+  },
+  { immediate: false },
+);
 </script>

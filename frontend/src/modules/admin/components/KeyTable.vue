@@ -9,6 +9,7 @@ import AdminTable from "@/components/common/AdminTable.vue";
 import ConfirmDialog from "@/components/common/dialogs/ConfirmDialog.vue";
 import { formatDateTime } from "@/utils/timeUtils.js";
 import { IconKey } from "@/components/icons";
+import LoadingIndicator from "@/components/common/LoadingIndicator.vue";
 
 // i18n
 const { t } = useI18n();
@@ -470,12 +471,12 @@ const keyColumns = computed(() => [
 const keyColumnClasses = computed(() => ({
   name: "",
   key: "",
-  permissions: "hidden lg:table-cell",
-  basic_path: "hidden xl:table-cell",
-  expires_at: "hidden 2xl:table-cell",
-  last_used: "hidden 2xl:table-cell",
-  status: "",
-  actions: ""
+  permissions: "hidden lg:table-cell text-center",
+  basic_path: "hidden xl:table-cell text-center",
+  expires_at: "hidden 2xl:table-cell text-center",
+  last_used: "hidden 2xl:table-cell text-center",
+  status: "text-center",
+  actions: "text-center"
 }));
 
 // ========== 选择管理 ==========
@@ -603,8 +604,13 @@ defineExpose({
   <div class="flex flex-col">
     <!-- 加载状态 -->
     <div v-if="isLoading && apiKeys.length === 0" class="flex flex-col items-center justify-center h-40">
-      <div class="animate-spin rounded-full h-8 w-8 border-b-2" :class="darkMode ? 'border-white' : 'border-primary-500'"></div>
-      <p class="mt-3 text-sm" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">{{ $t("admin.keyManagement.loadingKeys") }}</p>
+      <LoadingIndicator
+        :text="$t('admin.keyManagement.loadingKeys')"
+        :dark-mode="darkMode"
+        size="xl"
+        :icon-class="darkMode ? 'text-white' : 'text-primary-500'"
+        :text-class="darkMode ? 'text-gray-300' : 'text-gray-600'"
+      />
     </div>
 
     <!-- 空状态 -->
